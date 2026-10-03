@@ -103,7 +103,7 @@ async function loadEvents(){
        loc:x.location||'',
        desc:x.description||'',
        htmlLink:x.htmlLink||'',
-    cat:cat((x.summary||'')+' '+(x.description||'')),       allDay:!!x.start?.date
+    cat:cat((x.summary||'')+' '+(x.description||'')+' '+(x.location||'')),     allDay:!!x.start?.date
      };
    }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
    document.querySelector('#status').classList.add('hidden');
