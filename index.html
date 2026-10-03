@@ -10,7 +10,7 @@ header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);colo
 .toolbar{display:flex;gap:8px;overflow:auto;padding:14px}button{border:0;background:#fff;border-radius:999px;padding:9px 13px;white-space:nowrap;box-shadow:0 1px 5px #0001;font-weight:650}
 .month{font-size:22px;font-weight:800;padding:10px 15px}.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
 .card{color:#fff;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px;cursor:pointer}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:#fff;color:#333;padding:13px 15px}.card.open .detail{display:block}
-.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82}.padel{background:#2e7d32}.dance{background:#d81b60}.other{background:#d97706}
+.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82}.padel{background:#F9A825;}.dance{background:#d81b60}.other{background:#d97706}
 .btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:650}
 .state{margin:15px;background:#fff;border-radius:14px;padding:16px;color:#555;box-shadow:0 2px 8px #0001}.hidden{display:none}
 </style>
@@ -46,7 +46,7 @@ function cat(t){
   if(/p[aá]del|padel|tenis|f[uú]tbol|deporte|torneo/.test(t)) return 'padel';
   if(/ruta|sender|senderismo|montaña|excurs|roden|naturaleza/.test(t)) return 'route';
   if(/cine|pel[ií]cula|teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t)) return 'cinema';
-  if(/concierto|conciertos|tributo|m[uú]sica|musical|rock|festival|indie|dj|techno|sala moon|rock city|roig arena|marina sur|loco club/.test(t)) return 'concert';
+  if(/concierto|tributo|m[uú]sica|musical|rock|festival|indie|dj|techno|sala moon|rock city|roig arena|marina sur|loco club/.test(t)) return 'concert';
   if(/quedada|cena|comida|tapas|fiesta|tardeo|copa|havana/.test(t)) return 'meetup';
   if(/cata|bodega|vino|enotur/.test(t)) return 'wine';
   if(/escapada|viaje|fin de semana/.test(t)) return 'travel';
