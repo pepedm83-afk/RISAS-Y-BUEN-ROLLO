@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Risas y Buen Rollo</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202124}
+header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);color:white}main,header div{max-width:760px;margin:auto}
+h1{margin:0;font-size:28px}.sub{margin-top:5px}.month{font-size:22px;font-weight:800;padding:18px 15px 8px}
+.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
+.card{color:white;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:white;color:#333;padding:13px 15px}.card.open .detail{display:block}
+.music{background:#8e24aa}.route{background:#34834b}.social{background:#cf2b1e}.social2{background:#ea5b2a}.cinema{background:#536b82}
+.btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:600}
+.note{margin:15px;background:white;padding:14px;border-radius:14px;color:#555}
+</style></head><body>
+<header><div><h1>😄 Risas y Buen Rollo</h1><div class="sub">Agenda de actividades</div></div></header><main><div class="month">Octubre 2026</div><div id="events"></div>
+<div class="note">Toca una actividad para ver sus detalles. Esta es la primera prueba pública; después la conectaremos al calendario para actualizarla automáticamente.</div></main>
+<script>
+const E=[["SÁB","3","social","💃 Havana Cánovas","18:30–21:30","Cánovas, València"],["SÁB","3","music","🎸 Tributo A La Raíz","22:00","Rock City"],["DOM","4","social2","🎸 Yambú – La Casa de la Mar","12:00–15:00","Casa de la Mar"],["MAR","6","cinema","🎬 Cine en los Lys: cita a ciegas","19:30–22:30","Passeig de Russafa 3, València"],["JUE","8","music","🎵 Tributo Depeche Mode","17:30–20:30","Sala Jerusalem"],["VIE","9","route","🥾 Ruta en Les Rodenes + Comida","09:00–12:00","Les Rodenes"],["SÁB","17","music","🎸 La Frontera","19:30–21:30",""],["SÁB","17","music","🎵 Chiquita Movida (día 1 de 2)","21:30","Sala Moon"]];
+for(const [dw,d,c,t,time,loc] of E){let x=document.createElement("div");x.className="day";let q=encodeURIComponent(loc);x.innerHTML=`<div class=date>${dw}<b>${d}</b></div><div><div class="card ${c}"><div class=head><strong>${t}</strong><span>${time}${loc?" · "+loc:""}</span></div><div class=detail>${loc?`<p>📍 <b>${loc}</b></p><a class=btn target=_blank href="https://www.google.com/maps/search/?api=1&query=${q}">📍 Cómo llegar</a>`:""}<a class=btn href="#">📅 Añadir al calendario</a></div></div></div>`;x.querySelector(".head").onclick=()=>x.querySelector(".card").classList.toggle("open");events.append(x)}
+</script></body></html>
