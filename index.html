@@ -98,6 +98,7 @@ async function loadEvents(){
      const start=eventDate(x.start);
      return{
        title:x.summary||'Evento',
+      colorId:x.colorId||'sin color',
        start,
        loc:x.location||'',
        desc:x.description||'',
