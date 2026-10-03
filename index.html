@@ -43,22 +43,18 @@ let data=[],filter='all';
 function cat(t){
   t=(t||'').toLowerCase();
 
-  if(/p[aá]del|padel/.test(t)) return 'padel';
-  if(/ruta|sender|senderismo|montaña|excurs|roden/.test(t)) return 'route';
-  if(/cine|pel[ií]cula/.test(t)) return 'cinema';
-  if(/salsa|bachata/.test(t)) return 'dance';
-  if(/bolera|bowling/.test(t)) return 'bowling';
-  if(/moto|motera|motero/.test(t)) return 'moto';
-  if(/teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t)) return 'culture';
+  if(/p[aá]del|padel|tenis|f[uú]tbol|deporte|torneo/.test(t)) return 'padel';
+  if(/ruta|sender|senderismo|montaña|excurs|roden|naturaleza/.test(t)) return 'route';
+  if(/cine|pel[ií]cula|teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t)) return 'cinema';
+  if(/concierto|conciertos|tributo|m[uú]sica|musical|rock|festival|indie|dj|techno|sala moon|rock city|roig arena|marina sur|loco club/.test(t)) return 'concert';
+  if(/quedada|cena|comida|tapas|fiesta|tardeo|copa|havana/.test(t)) return 'meetup';
   if(/cata|bodega|vino|enotur/.test(t)) return 'wine';
   if(/escapada|viaje|fin de semana/.test(t)) return 'travel';
-
-  if(/concierto|tributo|m[uú]sica|rock|festival|yamb[uú]|frontera|shinova|santero|cafe[ií]na|seagulls|chiquita movida|charlotte de witte|hugel|extasis|éxtasis|sala moon|rock city|roig arena|marina sur/.test(t)) return 'concert';
-
-  if(/quedada|cena|comida|fiesta|havana|tapas|canaleta|tardeo|copa/.test(t)) return 'meetup';
+  if(/bolera|bowling|juego|ocio/.test(t)) return 'bowling';
 
   return 'other';
 }
+  
 function icon(c){
  return c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
 }
@@ -107,8 +103,7 @@ async function loadEvents(){
        loc:x.location||'',
        desc:x.description||'',
        htmlLink:x.htmlLink||'',
-       cat:cat(x.summary||''),
-       allDay:!!x.start?.date
+    cat:cat((x.summary||'')+' '+(x.description||'')),       allDay:!!x.start?.date
      };
    }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
    document.querySelector('#status').classList.add('hidden');
