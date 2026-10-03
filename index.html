@@ -41,19 +41,23 @@ const API_KEY='AIzaSyDuk4wePxeBix_jiZJWEFH2-pRYHr14y48';
 let data=[],filter='all';
 
 function cat(t){
- t=(t||'').toLowerCase();
- if(/ruta|sender|senderismo|montaña|excurs|rod(en|e)/.test(t))return'route';
- if(/indie|concierto|tributo|m[uú]sica|rock|festival|yambú|yambu|frontera/.test(t))return'concert';
- if(/s[aá]bado alternativo|domingueo|tardeo|cervecitas|quedada|cena|comida|fiesta|havana/.test(t))return'meetup';
- if(/bolera|bowling/.test(t))return'bowling';
- if(/moto|motera|motero/.test(t))return'moto';
- if(/teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t))return'culture';
- if(/cata|bodega|vino|enotur/.test(t))return'wine';
- if(/escapada|viaje|fin de semana/.test(t))return'travel';
- if(/cine|pel[ií]cula/.test(t))return'cinema';
- if(/p[aá]del|padel/.test(t))return'padel';
- if(/salsa|bachata/.test(t))return'dance';
- return'other';
+  t=(t||'').toLowerCase();
+
+  if(/p[aá]del|padel/.test(t)) return 'padel';
+  if(/ruta|sender|senderismo|montaña|excurs|roden/.test(t)) return 'route';
+  if(/cine|pel[ií]cula/.test(t)) return 'cinema';
+  if(/salsa|bachata/.test(t)) return 'dance';
+  if(/bolera|bowling/.test(t)) return 'bowling';
+  if(/moto|motera|motero/.test(t)) return 'moto';
+  if(/teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t)) return 'culture';
+  if(/cata|bodega|vino|enotur/.test(t)) return 'wine';
+  if(/escapada|viaje|fin de semana/.test(t)) return 'travel';
+
+  if(/concierto|tributo|m[uú]sica|rock|festival|yamb[uú]|frontera|shinova|santero|cafe[ií]na|seagulls|chiquita movida|charlotte de witte|hugel|extasis|éxtasis|sala moon|rock city|roig arena|marina sur/.test(t)) return 'concert';
+
+  if(/quedada|cena|comida|fiesta|havana|tapas|canaleta|tardeo|copa/.test(t)) return 'meetup';
+
+  return 'other';
 }
 function icon(c){
  return c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
@@ -74,7 +78,7 @@ function render(){
    const maps=e.loc?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
    const links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class="btn" target="_blank" rel="noopener" href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
    const gcal=e.htmlLink?`<a class="btn" target="_blank" rel="noopener" href="${esc(e.htmlLink)}">📅 Ver en Calendar</a>`:'';
-   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)} [ID:${e.colorId}]</strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}${gcal}</div></div></div>`;
+   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)} </strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}${gcal}</div></div></div>`;
    day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');
    box.append(day);
  }
@@ -103,7 +107,7 @@ async function loadEvents(){
        loc:x.location||'',
        desc:x.description||'',
        htmlLink:x.htmlLink||'',
-       cat: x.colorId==='7'?'concert':x.colorId==='2'?'route':x.colorId==='11'?'meetup':x.colorId==='9'?'cinema':x.colorId==='5'?'padel':cat(x.summary||''),
+       cat:cat(x.summary||''),
        allDay:!!x.start?.date
      };
    }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
