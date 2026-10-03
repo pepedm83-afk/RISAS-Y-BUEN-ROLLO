@@ -102,7 +102,7 @@ async function loadEvents(){
        loc:x.location||'',
        desc:x.description||'',
        htmlLink:x.htmlLink||'',
-       cat:cat(x.summary||''),
+       cat: x.colorId==='3'?'concert':x.colorId==='10'?'route':x.colorId==='11'?'meetup':x.colorId==='9'?'cinema':x.colorId==='5'?'padel':cat(x.summary||''),
        allDay:!!x.start?.date
      };
    }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
