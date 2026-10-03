@@ -1,5 +1,8 @@
 <!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Risas y Buen Rollo · Agenda</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202124}
@@ -7,38 +10,110 @@ header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);colo
 .toolbar{display:flex;gap:8px;overflow:auto;padding:14px}button{border:0;background:#fff;border-radius:999px;padding:9px 13px;white-space:nowrap;box-shadow:0 1px 5px #0001;font-weight:650}
 .month{font-size:22px;font-weight:800;padding:10px 15px}.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
 .card{color:#fff;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px;cursor:pointer}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:#fff;color:#333;padding:13px 15px}.card.open .detail{display:block}
-.music{background:#8e24aa}.route{background:#34834b}.cinema{background:#536b82}.social{background:#cf2b1e}.other{background:#d97706}
+.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82}.padel{background:#2e7d32}.dance{background:#d81b60}.other{background:#d97706}
 .btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:650}
 .state{margin:15px;background:#fff;border-radius:14px;padding:16px;color:#555;box-shadow:0 2px 8px #0001}.hidden{display:none}
-</style></head><body><header><div class=wrap><h1>😄 Risas y Buen Rollo</h1><div class=sub>Agenda de próximos eventos</div></div></header>
-<main class=wrap><div class=toolbar><button onclick="filter='all';render()">✨ Todo</button><button onclick="filter='music';render()">🎸 Música</button><button onclick="filter='route';render()">🥾 Rutas</button><button onclick="filter='cinema';render()">🎬 Cine</button><button onclick="filter='social';render()">💃 Quedadas</button></div>
-<div id=status class=state>Actualizando agenda desde Google Calendar…</div><div id=events></div></main>
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>😄 Risas y Buen Rollo</h1><div class="sub">Agenda de próximos eventos</div></div></header>
+<main class="wrap">
+<div class="toolbar">
+<button onclick="filter='all';render()">✨ Todo</button>
+<button onclick="filter='route';render()">🥾 Rutas</button>
+<button onclick="filter='concert';render()">🎸 Conciertos</button>
+<button onclick="filter='meetup';render()">🥳 Quedadas</button>
+<button onclick="filter='bowling';render()">🎳 Bolera</button>
+<button onclick="filter='moto';render()">🏍️ Moto</button>
+<button onclick="filter='culture';render()">🎭 Teatro y cultura</button>
+<button onclick="filter='wine';render()">🍷 Catas y bodegas</button>
+<button onclick="filter='travel';render()">✈️ Escapadas y viajes</button>
+<button onclick="filter='cinema';render()">🎬 Cine</button>
+<button onclick="filter='padel';render()">🎾 Pádel</button>
+<button onclick="filter='dance';render()">💃 Salsa y bachata</button>
+</div>
+<div id="status" class="state">Actualizando agenda desde Google Calendar…</div>
+<div id="events"></div>
+</main>
 <script>
 const CAL='2d81283f75ae3bfabc2eb176a80992382d586172f3afc62dae40f94664d522a1@group.calendar.google.com';
-const ICS='https://calendar.google.com/calendar/ical/'+encodeURIComponent(CAL)+'/public/basic.ics';
+const API_KEY='AIzaSyDuk4wePxeBix_jiZJWEFH2-pRYHr14y48';
 let data=[],filter='all';
-const proxy='https://api.allorigins.win/raw?url='+encodeURIComponent(ICS);
-function unfold(s){return s.replace(/\r?\n[ \t]/g,'')}
-function val(b,k){let m=b.match(new RegExp('^'+k+'(?:;[^:]*)?:(.*)$','m'));return m?m[1].trim():''}
-function clean(s){return s.replace(/\\n/g,'\n').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\')}
-function dt(s){if(!s)return null;if(/^\d{8}$/.test(s))return new Date(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8));let z=s.endsWith('Z');s=s.replace(/Z$/,'');let d=new Date(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8),+s.slice(9,11),+s.slice(11,13));return z?new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes())):d}
-function cat(t){t=t.toLowerCase();if(/ruta|sender|montaña|excurs|rod(en|e)/.test(t))return'route';if(/cine|pel[ií]cula/.test(t))return'cinema';if(/concierto|tributo|m[uú]sica|rock|sala|yamb[uú]|frontera|movida/.test(t))return'music';if(/quedada|cena|comida|fiesta|baile|havana|tardeo|copa/.test(t))return'social';return'other'}
-function icon(c){return c==='music'?'🎸':c==='route'?'🥾':c==='cinema'?'🎬':c==='social'?'💃':'✨'}
-function esc(s){return(s||'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
-function render(){
- let box=document.querySelector('#events');box.innerHTML='';let shown=data.filter(e=>filter==='all'||e.cat===filter);
- let month='';
- for(const e of shown){let m=e.start.toLocaleDateString('es-ES',{month:'long',year:'numeric'});if(m!==month){month=m;box.insertAdjacentHTML('beforeend',`<div class=month>${m[0].toUpperCase()+m.slice(1)}</div>`)}
- let day=document.createElement('div');day.className='day';let dw=e.start.toLocaleDateString('es-ES',{weekday:'short'}).replace('.','').toUpperCase();
- let times=e.allDay?'Todo el día':e.start.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
- let maps=e.loc?`<a class=btn target=_blank href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
- let links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class=btn target=_blank href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
- day.innerHTML=`<div class=date>${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class=head><strong>${icon(e.cat)} ${esc(e.title)}</strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class=detail>${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}</div></div></div>`;
- day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');box.append(day)}
+
+function cat(t){
+ t=(t||'').toLowerCase();
+ if(/ruta|sender|senderismo|montaña|excurs|rod(en|e)/.test(t))return'route';
+ if(/indie|concierto|tributo|m[uú]sica|rock|festival/.test(t))return'concert';
+ if(/s[aá]bado alternativo|domingueo|tardeo|cervecitas|quedada|cena|comida|fiesta|havana/.test(t))return'meetup';
+ if(/bolera|bowling/.test(t))return'bowling';
+ if(/moto|motera|motero/.test(t))return'moto';
+ if(/teatro|cultura|museo|exposici[oó]n|mon[oó]logo/.test(t))return'culture';
+ if(/cata|bodega|vino|enotur/.test(t))return'wine';
+ if(/escapada|viaje|fin de semana/.test(t))return'travel';
+ if(/cine|pel[ií]cula/.test(t))return'cinema';
+ if(/p[aá]del|padel/.test(t))return'padel';
+ if(/salsa|bachata/.test(t))return'dance';
+ return'other';
 }
-fetch(proxy).then(r=>{if(!r.ok)throw Error();return r.text()}).then(txt=>{
- let blocks=unfold(txt).split('BEGIN:VEVENT').slice(1).map(x=>x.split('END:VEVENT')[0]);let now=new Date();now.setHours(0,0,0,0);
- data=blocks.map(b=>{let raw=val(b,'DTSTART');let s=dt(raw);let title=clean(val(b,'SUMMARY'));return{title,start:s,loc:clean(val(b,'LOCATION')),desc:clean(val(b,'DESCRIPTION')),cat:cat(title),allDay:/^\d{8}$/.test(raw)}}).filter(e=>e.start&&e.start>=now).sort((a,b)=>a.start-b.start);
- document.querySelector('#status').classList.add('hidden');render();
-}).catch(()=>{document.querySelector('#status').innerHTML='No se ha podido cargar el calendario ahora mismo. <a href="https://calendar.google.com/calendar/embed?src='+encodeURIComponent(CAL)+'&ctz=Europe%2FMadrid">Abrir Google Calendar</a>';})
-</script></body></html>
+function icon(c){
+ return c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
+}
+function esc(s){return(s||'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
+function eventDate(x){return new Date(x.dateTime||x.date)}
+function render(){
+ const box=document.querySelector('#events'); box.innerHTML='';
+ const shown=data.filter(e=>filter==='all'||e.cat===filter);
+ let month='';
+ if(!shown.length){box.innerHTML='<div class="state">No hay próximos eventos en esta categoría.</div>';return}
+ for(const e of shown){
+   const m=e.start.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+   if(m!==month){month=m;box.insertAdjacentHTML('beforeend',`<div class="month">${m[0].toUpperCase()+m.slice(1)}</div>`)}
+   const day=document.createElement('div'); day.className='day';
+   const dw=e.start.toLocaleDateString('es-ES',{weekday:'short'}).replace('.','').toUpperCase();
+   const times=e.allDay?'Todo el día':e.start.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+   const maps=e.loc?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
+   const links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class="btn" target="_blank" rel="noopener" href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
+   const gcal=e.htmlLink?`<a class="btn" target="_blank" rel="noopener" href="${esc(e.htmlLink)}">📅 Ver en Calendar</a>`:'';
+   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)}</strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}${gcal}</div></div></div>`;
+   day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');
+   box.append(day);
+ }
+}
+async function loadEvents(){
+ try{
+   const timeMin=new Date(); timeMin.setHours(0,0,0,0);
+   const params=new URLSearchParams({
+     key:API_KEY,
+     timeMin:timeMin.toISOString(),
+     singleEvents:'true',
+     orderBy:'startTime',
+     maxResults:'250',
+     timeZone:'Europe/Madrid'
+   });
+   const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CAL)}/events?${params}`;
+   const r=await fetch(url);
+   if(!r.ok) throw new Error('Calendar API '+r.status);
+   const j=await r.json();
+   data=(j.items||[]).filter(x=>x.status!=='cancelled').map(x=>{
+     const start=eventDate(x.start);
+     return{
+       title:x.summary||'Evento',
+       start,
+       loc:x.location||'',
+       desc:x.description||'',
+       htmlLink:x.htmlLink||'',
+       cat:cat(x.summary||''),
+       allDay:!!x.start?.date
+     };
+   }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
+   document.querySelector('#status').classList.add('hidden');
+   render();
+ }catch(err){
+   console.error(err);
+   document.querySelector('#status').innerHTML='No se ha podido cargar el calendario. Revisa que la clave tenga habilitada Google Calendar API y que este calendario sea público.';
+ }
+}
+loadEvents();
+</script>
+</body>
+</html>
