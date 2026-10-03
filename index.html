@@ -43,7 +43,7 @@ let data=[],filter='all';
 function cat(t){
  t=(t||'').toLowerCase();
  if(/ruta|sender|senderismo|montaña|excurs|rod(en|e)/.test(t))return'route';
- if(/indie|concierto|tributo|m[uú]sica|rock|festival/.test(t))return'concert';
+ if(/indie|concierto|tributo|m[uú]sica|rock|festival|yambú|yambu|frontera/.test(t))return'concert';
  if(/s[aá]bado alternativo|domingueo|tardeo|cervecitas|quedada|cena|comida|fiesta|havana/.test(t))return'meetup';
  if(/bolera|bowling/.test(t))return'bowling';
  if(/moto|motera|motero/.test(t))return'moto';
