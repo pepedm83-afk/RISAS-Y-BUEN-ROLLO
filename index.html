@@ -1,19 +1,44 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Risas y Buen Rollo</title>
+<title>Risas y Buen Rollo · Agenda</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202124}
-header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);color:white}main,header div{max-width:760px;margin:auto}
-h1{margin:0;font-size:28px}.sub{margin-top:5px}.month{font-size:22px;font-weight:800;padding:18px 15px 8px}
-.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
-.card{color:white;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:white;color:#333;padding:13px 15px}.card.open .detail{display:block}
-.music{background:#8e24aa}.route{background:#34834b}.social{background:#cf2b1e}.social2{background:#ea5b2a}.cinema{background:#536b82}
-.btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:600}
-.note{margin:15px;background:white;padding:14px;border-radius:14px;color:#555}
-</style></head><body>
-<header><div><h1>😄 Risas y Buen Rollo</h1><div class="sub">Agenda de actividades</div></div></header><main><div class="month">Octubre 2026</div><div id="events"></div>
-<div class="note">Toca una actividad para ver sus detalles. Esta es la primera prueba pública; después la conectaremos al calendario para actualizarla automáticamente.</div></main>
+header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);color:#fff}.wrap{max-width:780px;margin:auto}h1{margin:0;font-size:28px}.sub{margin-top:5px;opacity:.92}
+.toolbar{display:flex;gap:8px;overflow:auto;padding:14px}button{border:0;background:#fff;border-radius:999px;padding:9px 13px;white-space:nowrap;box-shadow:0 1px 5px #0001;font-weight:650}
+.month{font-size:22px;font-weight:800;padding:10px 15px}.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
+.card{color:#fff;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px;cursor:pointer}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:#fff;color:#333;padding:13px 15px}.card.open .detail{display:block}
+.music{background:#8e24aa}.route{background:#34834b}.cinema{background:#536b82}.social{background:#cf2b1e}.other{background:#d97706}
+.btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:650}
+.state{margin:15px;background:#fff;border-radius:14px;padding:16px;color:#555;box-shadow:0 2px 8px #0001}.hidden{display:none}
+</style></head><body><header><div class=wrap><h1>😄 Risas y Buen Rollo</h1><div class=sub>Agenda de próximos eventos</div></div></header>
+<main class=wrap><div class=toolbar><button onclick="filter='all';render()">✨ Todo</button><button onclick="filter='music';render()">🎸 Música</button><button onclick="filter='route';render()">🥾 Rutas</button><button onclick="filter='cinema';render()">🎬 Cine</button><button onclick="filter='social';render()">💃 Quedadas</button></div>
+<div id=status class=state>Actualizando agenda desde Google Calendar…</div><div id=events></div></main>
 <script>
-const E=[["SÁB","3","social","💃 Havana Cánovas","18:30–21:30","Cánovas, València"],["SÁB","3","music","🎸 Tributo A La Raíz","22:00","Rock City"],["DOM","4","social2","🎸 Yambú – La Casa de la Mar","12:00–15:00","Casa de la Mar"],["MAR","6","cinema","🎬 Cine en los Lys: cita a ciegas","19:30–22:30","Passeig de Russafa 3, València"],["JUE","8","music","🎵 Tributo Depeche Mode","17:30–20:30","Sala Jerusalem"],["VIE","9","route","🥾 Ruta en Les Rodenes + Comida","09:00–12:00","Les Rodenes"],["SÁB","17","music","🎸 La Frontera","19:30–21:30",""],["SÁB","17","music","🎵 Chiquita Movida (día 1 de 2)","21:30","Sala Moon"]];
-for(const [dw,d,c,t,time,loc] of E){let x=document.createElement("div");x.className="day";let q=encodeURIComponent(loc);x.innerHTML=`<div class=date>${dw}<b>${d}</b></div><div><div class="card ${c}"><div class=head><strong>${t}</strong><span>${time}${loc?" · "+loc:""}</span></div><div class=detail>${loc?`<p>📍 <b>${loc}</b></p><a class=btn target=_blank href="https://www.google.com/maps/search/?api=1&query=${q}">📍 Cómo llegar</a>`:""}<a class=btn href="#">📅 Añadir al calendario</a></div></div></div>`;x.querySelector(".head").onclick=()=>x.querySelector(".card").classList.toggle("open");events.append(x)}
+const CAL='2d81283f75ae3bfabc2eb176a80992382d586172f3afc62dae40f94664d522a1@group.calendar.google.com';
+const ICS='https://calendar.google.com/calendar/ical/'+encodeURIComponent(CAL)+'/public/basic.ics';
+let data=[],filter='all';
+const proxy='https://api.allorigins.win/raw?url='+encodeURIComponent(ICS);
+function unfold(s){return s.replace(/\r?\n[ \t]/g,'')}
+function val(b,k){let m=b.match(new RegExp('^'+k+'(?:;[^:]*)?:(.*)$','m'));return m?m[1].trim():''}
+function clean(s){return s.replace(/\\n/g,'\n').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\')}
+function dt(s){if(!s)return null;if(/^\d{8}$/.test(s))return new Date(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8));let z=s.endsWith('Z');s=s.replace(/Z$/,'');let d=new Date(+s.slice(0,4),+s.slice(4,6)-1,+s.slice(6,8),+s.slice(9,11),+s.slice(11,13));return z?new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes())):d}
+function cat(t){t=t.toLowerCase();if(/ruta|sender|montaña|excurs|rod(en|e)/.test(t))return'route';if(/cine|pel[ií]cula/.test(t))return'cinema';if(/concierto|tributo|m[uú]sica|rock|sala|yamb[uú]|frontera|movida/.test(t))return'music';if(/quedada|cena|comida|fiesta|baile|havana|tardeo|copa/.test(t))return'social';return'other'}
+function icon(c){return c==='music'?'🎸':c==='route'?'🥾':c==='cinema'?'🎬':c==='social'?'💃':'✨'}
+function esc(s){return(s||'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
+function render(){
+ let box=document.querySelector('#events');box.innerHTML='';let shown=data.filter(e=>filter==='all'||e.cat===filter);
+ let month='';
+ for(const e of shown){let m=e.start.toLocaleDateString('es-ES',{month:'long',year:'numeric'});if(m!==month){month=m;box.insertAdjacentHTML('beforeend',`<div class=month>${m[0].toUpperCase()+m.slice(1)}</div>`)}
+ let day=document.createElement('div');day.className='day';let dw=e.start.toLocaleDateString('es-ES',{weekday:'short'}).replace('.','').toUpperCase();
+ let times=e.allDay?'Todo el día':e.start.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+ let maps=e.loc?`<a class=btn target=_blank href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
+ let links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class=btn target=_blank href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
+ day.innerHTML=`<div class=date>${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class=head><strong>${icon(e.cat)} ${esc(e.title)}</strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class=detail>${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}</div></div></div>`;
+ day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');box.append(day)}
+}
+fetch(proxy).then(r=>{if(!r.ok)throw Error();return r.text()}).then(txt=>{
+ let blocks=unfold(txt).split('BEGIN:VEVENT').slice(1).map(x=>x.split('END:VEVENT')[0]);let now=new Date();now.setHours(0,0,0,0);
+ data=blocks.map(b=>{let raw=val(b,'DTSTART');let s=dt(raw);let title=clean(val(b,'SUMMARY'));return{title,start:s,loc:clean(val(b,'LOCATION')),desc:clean(val(b,'DESCRIPTION')),cat:cat(title),allDay:/^\d{8}$/.test(raw)}}).filter(e=>e.start&&e.start>=now).sort((a,b)=>a.start-b.start);
+ document.querySelector('#status').classList.add('hidden');render();
+}).catch(()=>{document.querySelector('#status').innerHTML='No se ha podido cargar el calendario ahora mismo. <a href="https://calendar.google.com/calendar/embed?src='+encodeURIComponent(CAL)+'&ctz=Europe%2FMadrid">Abrir Google Calendar</a>';})
 </script></body></html>
