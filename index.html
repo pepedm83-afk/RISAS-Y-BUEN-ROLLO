@@ -108,7 +108,7 @@ function render(){
    const times=e.allDay?'Todo el día':e.start.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
    const maps=e.loc?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
    const links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class="btn" target="_blank" rel="noopener" href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
-   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)} </strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}</div></div></div>`;
+   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)} </strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}<a class="btn" target="_blank" rel="noopener noreferrer" href="https://chat.whatsapp.com/GcoRi9UYCQ60LQuotd4VGK?mode=gi_t">💬 Responder en WhatsApp</a><p style="font-size:13px;color:#666;margin-bottom:0">Abre el grupo de Eventos, busca esta actividad y pulsa «Responder». La asistencia se marca en WhatsApp.</p></div></div></div>`;
    day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');
    box.append(day);
  }
