@@ -15,7 +15,7 @@ header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);colo
 .toolbar{display:flex;gap:8px;overflow:auto;padding:14px}button{border:0;background:#fff;border-radius:999px;padding:9px 13px;white-space:nowrap;box-shadow:0 1px 5px #0001;font-weight:650}
 .month{font-size:22px;font-weight:800;padding:10px 15px}.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
 .card{color:#fff;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px;cursor:pointer}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:#fff;color:#333;padding:13px 15px}.card.open .detail{display:block}
-.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82} .padel{background:#F9A825;color:#202124}.dance{background:#d81b60}.other{background:#d97706}
+.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.palau{background:#00796b}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82} .padel{background:#F9A825;color:#202124}.dance{background:#d81b60}.other{background:#d97706}
 .btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:650}
 .state{margin:15px;background:#fff;border-radius:14px;padding:16px;color:#555;box-shadow:0 2px 8px #0001}.hidden{display:none}
 </style>
@@ -29,6 +29,7 @@ header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);colo
 <button onclick="filter='route';render()">🥾 Rutas</button>
 <button onclick="filter='concert';render()">🎸 Conciertos</button>
 <button onclick="filter='meetup';render()">🥳 Quedadas</button>
+<button onclick="filter='palau';render()">🌴 Tardeo Palau</button>
 <button onclick="filter='bowling';render()">🎳 Bolera</button>
 <button onclick="filter='moto';render()">🏍️ Moto</button>
 <button onclick="filter='culture';render()">🎭 Teatro y cultura</button>
@@ -48,6 +49,7 @@ let data=[],filter='all';
 
 // La categoría pertenece a la actividad, nunca al nombre de la sala o artista.
 const CATEGORY_RULES=[
+ ['palau',/\btardeos?\s+palau\b/,/🌴/],
  ['padel',/\bpadel\b/,/🎾/],
  ['dance',/\b(salsa|bachata|baile|bailar|kizomba)\b/,/💃|🕺/],
  ['bowling',/\b(bolera|bolos|bowling)\b/,/🎳/],
@@ -91,7 +93,7 @@ function cat(event){
  return categoryFromText(activity)||'other';
 }
 function icon(c){
- return c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
+ return c==='palau'?'🌴':c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
 }
 function esc(s){return(s||'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
 function eventDate(x){return new Date(x.dateTime||x.date)}
@@ -136,3 +138,4 @@ loadEvents();
 </script>
 </body>
 </html>
+
