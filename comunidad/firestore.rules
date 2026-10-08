@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function verified() { return request.auth != null && request.auth.token.email_verified == true; }
+    function owner() { return verified() && request.auth.token.email == 'pepedm83@gmail.com'; }
+    function admin(group) { return owner() || (verified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && group in get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.groups); }
+    match /profiles/{uid} {
+      allow read: if verified() && (request.auth.uid == uid || owner());
+      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80;
+      allow delete: if verified() && request.auth.uid == uid;
+    }
+    match /groups/{id} {
+      allow read: if true;
+      allow write: if owner() && request.resource.data.keys().hasOnly(['name','whatsapp']) && request.resource.data.name is string && request.resource.data.whatsapp is string && (request.resource.data.whatsapp == '' || request.resource.data.whatsapp.matches('https://chat[.]whatsapp[.]com/.*'));
+    }
+    match /grants/{uid} {
+      allow read: if verified() && (request.auth.uid == uid || owner());
+      allow create, update: if owner() && request.resource.data.keys().hasOnly(['groups']) && request.resource.data.groups is list;
+      allow delete: if owner();
+    }
+    match /requests/{uid} {
+      allow read: if verified() && (request.auth.uid == uid || owner());
+      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','group']) && request.resource.data.name is string && request.resource.data.name.size() <= 80 && request.resource.data.group is string && exists(/databases/$(database)/documents/groups/$(request.resource.data.group));
+      allow delete: if owner() || (verified() && request.auth.uid == uid);
+    }
+    match /events/{id} {
+      allow read: if true;
+      function validEvent() { return request.resource.data.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy']) && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 150 && request.resource.data.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance'] && request.resource.data.start is string && request.resource.data.location is string && request.resource.data.description is string && request.resource.data.description.size() <= 5000 && request.resource.data.ticket is string && (request.resource.data.ticket == '' || request.resource.data.ticket.matches('https://.*')) && request.resource.data.meal is string && request.resource.data.meal.size() <= 300 && exists(/databases/$(database)/documents/groups/$(request.resource.data.group)); }
+      allow create: if admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if admin(resource.data.group) && admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == resource.data.createdBy;
+      // Cancel by deleting the event; old registrations are inaccessible afterwards.
+      allow delete: if admin(resource.data.group);
+      match /attendees/{uid} {
+        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        allow create, update: if verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
+        allow delete: if verified() && (request.auth.uid == uid || admin(get(/databases/$(database)/documents/events/$(id)).data.group));
+      }
+    }
+  }
+}
