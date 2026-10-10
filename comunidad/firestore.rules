@@ -42,7 +42,7 @@ service cloud.firestore {
       }
       allow create: if admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == request.auth.uid;
       // Amounts and group cannot change after publication, avoiding stale paid reservations.
-      allow update: if admin(resource.data.group) && request.resource.data.group == resource.data.group && validEvent() && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.get('activityDeposit',0) == resource.data.get('activityDeposit',0) && request.resource.data.get('mealDeposit',0) == resource.data.get('mealDeposit',0);
+      allow update: if admin(resource.data.group) && admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == resource.data.createdBy;
       // Cancel by deleting the event; old registrations are inaccessible afterwards.
       allow delete: if admin(resource.data.group);
       match /attendees/{uid} {
