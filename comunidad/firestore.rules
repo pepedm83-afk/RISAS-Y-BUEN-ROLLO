@@ -25,15 +25,58 @@ service cloud.firestore {
     }
     match /events/{id} {
       allow read: if true;
-      function validEvent() { return request.resource.data.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy']) && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 150 && request.resource.data.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance'] && request.resource.data.start is string && request.resource.data.location is string && request.resource.data.description is string && request.resource.data.description.size() <= 5000 && request.resource.data.ticket is string && (request.resource.data.ticket == '' || request.resource.data.ticket.matches('https://.*')) && request.resource.data.meal is string && request.resource.data.meal.size() <= 300 && exists(/databases/$(database)/documents/groups/$(request.resource.data.group)); }
+      function https(value) { return value is string && (value == '' || value.matches('https://.*')); }
+      function validEvent() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions'])
+          && d.title is string && d.title.size() > 0 && d.title.size() <= 150
+          && d.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance']
+          && d.start is string && d.location is string && d.description is string && d.description.size() <= 5000
+          && https(d.ticket) && https(d.get('locationURL','')) && https(d.get('restaurantURL',''))
+          && d.meal is string && d.meal.size() <= 300 && d.get('mealTime','') is string
+          && d.get('bizumInstructions','') is string && d.get('bizumInstructions','').size() <= 500
+          && d.get('activityDeposit',0) is number && d.get('activityDeposit',0) >= 0 && d.get('activityDeposit',0) <= 10000
+          && d.get('mealDeposit',0) is number && d.get('mealDeposit',0) >= 0 && d.get('mealDeposit',0) <= 10000
+          && (d.meal != '' || (d.get('mealDeposit',0) == 0 && d.get('restaurantURL','') == '' && d.get('mealTime','') == ''))
+          && exists(/databases/$(database)/documents/groups/$(d.group));
+      }
       allow create: if admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == request.auth.uid;
-      allow update: if admin(resource.data.group) && admin(request.resource.data.group) && validEvent() && request.resource.data.createdBy == resource.data.createdBy;
+      // Amounts and group cannot change after publication, avoiding stale paid reservations.
+      allow update: if admin(resource.data.group) && request.resource.data.group == resource.data.group && validEvent() && request.resource.data.createdBy == resource.data.createdBy && request.resource.data.get('activityDeposit',0) == resource.data.get('activityDeposit',0) && request.resource.data.get('mealDeposit',0) == resource.data.get('mealDeposit',0);
       // Cancel by deleting the event; old registrations are inaccessible afterwards.
       allow delete: if admin(resource.data.group);
       match /attendees/{uid} {
+        function unpaid() { return !exists(/databases/$(database)/documents/events/$(id)/payments/$(uid)) || (get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('activity','pending') == 'pending' && get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('meal','pending') == 'pending'); }
         allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
-        allow create, update: if verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
-        allow delete: if verified() && (request.auth.uid == uid || admin(get(/databases/$(database)/documents/events/$(id)).data.group));
+allow create, update: if unpaid() && verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
+        allow delete: if verified() && request.auth.uid == uid && unpaid();
+      }
+      match /payments/{uid} {
+        function eventAdmin() { return admin(get(/databases/$(database)/documents/events/$(id)).data.group); }
+        function eligible(kind) {
+          let e = get(/databases/$(database)/documents/events/$(id)).data;
+          let a = get(/databases/$(database)/documents/events/$(id)/attendees/$(uid)).data;
+          return kind == 'activity' ? e.get('activityDeposit',0) > 0 : e.get('mealDeposit',0) > 0 && a.mealPeople > 0;
+        }
+        function userChange(kind) {
+          return request.resource.data.get(kind,'pending') == resource.data.get(kind,'pending') ||
+            (eligible(kind) && request.resource.data.get(kind,'pending') == 'reported' && resource.data.get(kind,'pending') != 'confirmed');
+        }
+        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || eventAdmin());
+        allow create: if verified() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
+          && request.resource.data.keys().hasOnly(['activity','meal'])
+          && request.resource.data.get('activity','pending') in ['pending','reported','confirmed']
+          && request.resource.data.get('meal','pending') in ['pending','reported','confirmed']
+          && (eventAdmin() || (request.auth.uid == uid
+            && request.resource.data.get('activity','pending') in ['pending','reported']
+            && request.resource.data.get('meal','pending') in ['pending','reported']
+            && (request.resource.data.get('activity','pending') == 'pending' || eligible('activity'))
+            && (request.resource.data.get('meal','pending') == 'pending' || eligible('meal'))));
+        allow update: if verified() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
+          && request.resource.data.keys().hasOnly(['activity','meal'])
+          && request.resource.data.get('activity','pending') in ['pending','reported','confirmed']
+          && request.resource.data.get('meal','pending') in ['pending','reported','confirmed']
+          && (eventAdmin() || (request.auth.uid == uid && userChange('activity') && userChange('meal')));
       }
     }
   }
