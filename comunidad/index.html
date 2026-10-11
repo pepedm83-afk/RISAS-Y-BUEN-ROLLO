@@ -135,18 +135,19 @@ async function attendance(e,box){
  }
  box.append(el('p','Los importes mostrados corresponden a la reserva actual. Si se han modificado, revisa los Bizum anteriores: la confirmación no verifica automáticamente la cantidad.'));if(e.meal)box.append(el('p','Total comida/cena: '+rows.reduce((n,r)=>n+r.mealPeople,0)));
  const own=rows.find(r=>r.uid===user.uid),f=el('form');
- f.innerHTML='<fieldset class="attendance-choice"><legend>¿Quién va?</legend><div class="choices"><label><input type="radio" name="party" value="solo" required>Voy solo</label><label><input type="radio" name="party" value="plus" required>Voy con acompañantes</label></div></fieldset><label class="companion-field" hidden>¿Cuántos acompañantes llevas?<input name="companions" type="number" min="0" max="10" value="0" required><small>Sin contarte a ti.</small></label>';
+ f.innerHTML='<fieldset class="attendance-choice"><legend>¿Quién va?</legend><div class="choices"><label><input type="radio" name="party" value="solo" required>Voy solo</label><label><input type="radio" name="party" value="plus" required>Voy con acompañantes</label></div></fieldset><label class="companion-field" hidden>¿Cuántos acompañantes llevas?<input name="companions" type="number" min="0" max="10" value="" required><small>Sin contarte a ti.</small></label>';
  const companionField=f.querySelector('.companion-field'),companionInput=f.elements.companions;
- companionInput.value=own?.companions||0;
+ companionInput.value=own?.companions>0?own.companions:'';
  f.querySelector('input[value="'+(Number(companionInput.value)>0?'plus':'solo')+'"]').checked=true;
- if(e.meal){const label=el('label','Personas para comida/cena (incluyéndote)'),i=el('input');i.name='mealPeople';i.type='number';i.min='0';i.max='11';i.required=true;i.value=own?.mealPeople||0;label.append(i,el('small','Pon 0 si no vais a la comida.'));f.append(label)}
+ if(e.meal){const label=el('label','Personas para comida/cena (incluyéndote)'),i=el('input');i.name='mealPeople';i.type='number';i.min='0';i.max='11';i.required=true;i.value=own?.mealPeople??'';label.append(i,el('small','Pon 0 si no vais a la comida.'));f.append(label)}
  const total=el('p');total.className='attendance-total';total.setAttribute('role','status');f.append(total);
- function updateParty(){const plus=f.querySelector('input[value="plus"]').checked;companionField.hidden=!plus;companionInput.min=plus?'1':'0';if(!plus)companionInput.value=0;else if(Number(companionInput.value)<1)companionInput.value=1;const count=1+Number(companionInput.value);total.textContent='Total: '+count+(count===1?' persona':' personas');if(f.elements.mealPeople)f.elements.mealPeople.max=String(count);}
+ function updateParty(){const plus=f.querySelector('input[value="plus"]').checked;companionField.hidden=!plus;companionInput.disabled=!plus;companionInput.required=plus;companionInput.min='1';const extras=plus?Number(companionInput.value):0,count=1+extras,valid=Number.isInteger(extras)&&extras>=1&&extras<=10;total.textContent=plus&&(!companionInput.value||!valid)?'Indica cuántos acompañantes llevas.':'Total: '+count+(count===1?' persona':' personas');if(f.elements.mealPeople)f.elements.mealPeople.max=String(plus&&(!companionInput.value||!valid)?11:count);}
+
  for(const radio of f.querySelectorAll('input[name="party"]'))radio.onchange=updateParty;companionInput.oninput=updateParty;updateParty();
  const save=el('button',own?'Guardar cambios de asistencia':'Confirmar asistencia');save.classList.add('success');save.style.width='100%';f.append(save);
  f.onsubmit=ev=>{ev.preventDefault();run(async()=>{
   const p=(await getDoc(doc(db,'profiles',user.uid))).data();if(!p?.name)throw Error('Guarda primero tu nombre en Tu cuenta.');
-  const companions=Number(f.elements.companions.value),mealPeople=Number(f.elements.mealPeople?.value||0);
+  const companions=f.querySelector('input[value="plus"]').checked?Number(f.elements.companions.value):0,mealPeople=Number(f.elements.mealPeople?.value||0);
   if(mealPeople>companions+1)throw Error('El total para comer no puede superar las personas inscritas.');
   const pay=(await getDoc(doc(db,'events',e.id,'payments',user.uid))).data()||{};
   if(own&&(companions!==own.companions||mealPeople!==own.mealPeople)&&Object.values(pay).some(s=>s!=='pending'))throw Error('Hay una reserva con pago comunicado o confirmado. Pide al administrador que la revise y la marque pendiente antes de cambiar personas.');
