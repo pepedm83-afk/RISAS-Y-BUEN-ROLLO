@@ -45,10 +45,10 @@ async function attendance(e,box){
    const payment=(await getDoc(doc(db,'events',e.id,'payments',r.uid))).data()||{};
    for(const [kind,label,count,deposit] of [['activity','Actividad',r.companions+1,e.activityDeposit],['meal','Comida/cena',r.mealPeople,e.mealDeposit]]){
     if(!deposit||!count)continue;
-    const status=payment[kind]||'pending',p=el('p',label+': '+(count*deposit).toFixed(2)+' € · '+paymentLabels[status]);row.append(p);
-    if(r.uid===user.uid&&status!=='confirmed')button(p,'He enviado este Bizum',async()=>{await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'reported'},{merge:true});await attendance(e,box);msg('Pago comunicado. Falta confirmación del administrador.')});
+    const status=payment[kind]||'pending',paymentBox=el('div'),p=el('div');p.className='actions';p.style.gap='8px';p.style.marginBottom='16px';paymentBox.append(el('p',label+': '+(count*deposit).toFixed(2)+' € · '+paymentLabels[status]),p);row.append(paymentBox);
+    if(r.uid===user.uid&&status==='pending')button(p,'He enviado este Bizum',async()=>{await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'reported'},{merge:true});await attendance(e,box);msg('Pago comunicado. Falta confirmación del administrador.')});
     if(canEdit(e.group)){
-     button(p,'Confirmar recepción',async()=>{if(!confirm('¿Has recibido el Bizum de '+label+' de '+r.name+'?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'confirmed'},{merge:true});await attendance(e,box)});
+     if(status!=='confirmed')button(p,'Confirmar recepción',async()=>{if(!confirm('¿Has recibido el Bizum de '+label+' de '+r.name+'?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'confirmed'},{merge:true});await attendance(e,box)});
      if(status!=='pending')button(p,'Marcar pendiente',async()=>{if(!confirm('¿Volver a pendiente?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'pending'},{merge:true});await attendance(e,box)});
     }
    }
