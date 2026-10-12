@@ -13,8 +13,15 @@ service cloud.firestore {
     }
     match /profiles/{uid} {
       allow read: if verified() && (request.auth.uid == uid || communityAdmin());
-      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','lastSeen']) && (!('lastSeen' in request.resource.data) || request.resource.data.lastSeen == request.time || (exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.lastSeen == resource.data.get('lastSeen',null))) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80;
+      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','nameKey','lastSeen']) && (!('lastSeen' in request.resource.data) || request.resource.data.lastSeen == request.time || (exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.lastSeen == resource.data.get('lastSeen',null))) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.name == resource.data.name && request.resource.data.get('nameKey','') == resource.data.get('nameKey','')) || (request.resource.data.nameKey is string && request.resource.data.nameKey.size() > 0 && getAfter(/databases/$(database)/documents/nameClaims/$(request.resource.data.nameKey)).data.uid == uid));
       allow delete: if verified() && request.auth.uid == uid;
+    }
+    match /nameClaims/{key} {
+      allow read: if verified();
+      // Pepe can reserve the names of existing members without changing their profiles.
+      allow create: if owner() || (verified() && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.nameKey == key);
+      allow update: if false;
+      allow delete: if verified() && resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('nameKey','') != key;
     }
     match /groups/{id} {
       allow read: if true;
