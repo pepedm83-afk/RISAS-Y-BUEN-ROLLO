@@ -43,15 +43,29 @@ service cloud.firestore {
       allow create, update: if (owner() || (verified() && emailVerified() && request.auth.uid == uid && request.resource.data.email == request.auth.token.email)) && request.resource.data.keys().hasOnly(['email']) && request.resource.data.email is string && request.resource.data.email.size() > 3 && request.resource.data.email.size() <= 254;
       allow delete: if owner();
     }
+    match /emailSubscriptions/{uid} {
+      allow read: if noticeSender() || (verified() && request.auth.uid == uid);
+      allow create, update: if verified() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['email','enabled','groups','updatedAt'])
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.enabled is bool
+        && (!request.resource.data.enabled || (emailVerified() && request.auth.token.email != 'pepedm83@gmail.com'))
+        && request.resource.data.groups is list && request.resource.data.groups.size() <= 100
+        && request.resource.data.groups.toSet().size() == request.resource.data.groups.size()
+        && (!request.resource.data.enabled || request.resource.data.groups.size() > 0)
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if verified() && request.auth.uid == uid;
+    }
     match /notificationQueue/{id} {
+      function adminCreator() { return owner() || (emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && (get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') == 'community' || get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('groups',[]).size() > 0)); }
       // Requests exist only with a newly created event by a non-admin. Clients cannot select recipients or send arbitrary mail.
-      allow create: if verified() && !owner() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','createdAt','status'])
+      allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','createdAt','status'])
+        && request.resource.data.notifyAdmins == !adminCreator()
         && request.resource.data.eventId == id && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.creatorName == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.name
         && request.resource.data.createdAt == request.time && request.resource.data.status == 'pending'
         && !exists(/databases/$(database)/documents/events/$(id))
-        && getAfter(/databases/$(database)/documents/events/$(id)).data.createdBy == request.auth.uid
-        && (!exists(/databases/$(database)/documents/grants/$(request.auth.uid)) || (get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') != 'community' && get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('groups',[]).size() == 0));
+        && getAfter(/databases/$(database)/documents/events/$(id)).data.createdBy == request.auth.uid;
       allow read: if owner() || noticeSender();
       allow update: if noticeSender() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','deliveredTo','lastError','lastAttemptAt','completedAt'])
         && request.resource.data.status in ['pending','waitingContacts','sent','skipped','needsReview'];
