@@ -27,11 +27,13 @@ service cloud.firestore {
     }
     match /groups/{id} {
       allow read: if true;
-      allow write: if owner() && request.resource.data.keys().hasOnly(['name','whatsapp']) && request.resource.data.name is string && request.resource.data.whatsapp is string && (request.resource.data.whatsapp == '' || request.resource.data.whatsapp.matches('https://chat[.]whatsapp[.]com/.*'));
+      allow create, update: if communityAdmin() && request.resource.data.keys().hasOnly(['name','whatsapp']) && request.resource.data.name is string && request.resource.data.whatsapp is string && (request.resource.data.whatsapp == '' || request.resource.data.whatsapp.matches('https://chat[.]whatsapp[.]com/.*'));
     }
     match /grants/{uid} {
-      allow read: if verified() && (request.auth.uid == uid || owner());
+      allow read: if verified() && (request.auth.uid == uid || communityAdmin());
       allow create, update: if owner() && request.resource.data.keys().hasOnly(['groups','role']) && request.resource.data.groups is list && request.resource.data.get('role', 'group') in ['group','community'];
+      // Community admins assign groups only to existing admins. Only Pepe changes roles or authorizes new admins.
+      allow update: if communityAdmin() && request.resource.data.keys().hasOnly(['groups','role']) && request.resource.data.groups is list && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groups']) && request.resource.data.get('role','group') == resource.data.get('role','group');
       allow delete: if owner();
     }
     match /requests/{uid} {
