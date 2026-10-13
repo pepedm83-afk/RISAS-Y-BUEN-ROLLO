@@ -57,7 +57,13 @@ service cloud.firestore {
       allow delete: if verified() && request.auth.uid == uid;
     }
     match /notificationQueue/{id} {
-      function adminCreator() { return owner() || (emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && (get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') == 'community' || get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('groups',[]).size() > 0)); }
+      function assignedCreator() {
+        return emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid))
+          && (get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') == 'community'
+          || (emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid))
+          && get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('groups',[]).size() > 0));
+      }
+      function adminCreator() { return owner() || assignedCreator(); }
       // Requests exist only with a newly created event by a non-admin. Clients cannot select recipients or send arbitrary mail.
       allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','createdAt','status'])
         && request.resource.data.notifyAdmins == !adminCreator()
