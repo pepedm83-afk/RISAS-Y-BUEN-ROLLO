@@ -112,7 +112,7 @@ function deliveryKey_(eventId, email) {
   return 'delivery-' + bytes.map(byte => ((byte + 256) % 256).toString(16).padStart(2, '0')).join('');
 }
 
-function processRequest_(queue, grants, token) {
+function processRequest_(queue, grants, token, subscriptions) {
   const eventDoc = firestore_('/events/' + encodeURIComponent(queue.eventId), token);
   const event = eventDoc && decodeFields_(eventDoc.fields);
   const groupDoc = event && firestore_('/groups/' + encodeURIComponent(event.group), token);
@@ -127,7 +127,17 @@ function processRequest_(queue, grants, token) {
     const contact = firestore_('/notificationContacts/' + encodeURIComponent(grant.id), token);
     if (contact) contacts[grant.id] = decodeFields_(contact.fields).email;
   }
-  const routing = resolveRecipients_(grants, event.group, contacts, blocked);
+  const alertAdmins = queue.notifyAdmins !== false;
+  const routing = alertAdmins ? resolveRecipients_(grants, event.group, contacts, blocked) : {recipients: [], missing: []};
+  const unique = new Map(routing.recipients.map(r => [r.key, r]));
+  for (const subscription of subscriptions || []) {
+    if (!subscription.enabled || !(subscription.groups || []).includes(event.group) || new Date(subscription.updatedAt).getTime() > new Date(queue.createdAt).getTime()) continue;
+    const member = firestore_('/members/' + encodeURIComponent(subscription.id), token);
+    if (member && decodeFields_(member.fields).blocked) continue;
+    const key = canonicalEmail_(subscription.email);
+    if (key && key !== EXCLUDED_MAILBOX && !unique.has(key)) unique.set(key, {key, email: subscription.email.trim()});
+  }
+  routing.recipients = Array.from(unique.values());
   const delivered = new Set(queue.deliveredTo || []), props = PropertiesService.getScriptProperties();
   for (const recipient of routing.recipients) {
     if (delivered.has(recipient.key)) continue;
@@ -161,8 +171,8 @@ function procesarAvisos() {
   try {
     const token = firebaseToken_(), pending = pendingRequests_(token);
     if (!pending.length) return;
-    const grants = listDocuments_('grants', token);
-    for (const queue of pending) processRequest_(queue, grants, token);
+    const grants = listDocuments_('grants', token), subscriptions = listDocuments_('emailSubscriptions', token);
+    for (const queue of pending) processRequest_(queue, grants, token, subscriptions);
   } finally { lock.releaseLock(); }
 }
 

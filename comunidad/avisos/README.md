@@ -13,3 +13,11 @@ No se envían avisos por eventos antiguos, modificaciones o quedadas creadas por
 Si un intento queda sin confirmación, pasa a `needsReview` y no se repite automáticamente. Un administrador debe comprobar el correo enviado antes de decidir repetirlo. Esta precaución evita duplicados ante fallos entre el envío y el registro de su resultado.
 
 La autorización y la activación del disparador son imprescindibles: guardar el código o la dirección del buzón no activa los avisos.
+# Avisos voluntarios de usuarios y calendario
+
+Cada evento ofrece Google Calendar y un archivo .ics compatible con otros calendarios. No solicita acceso a la cuenta de calendario. Duración orientativa 3 horas; la copia no sincroniza modificaciones posteriores.
+
+Los usuarios pueden elegir recibir nuevas quedadas de grupos concretos desde Mi cuenta. La opción está desactivada por defecto. Para activar emails, verifican su correo; participar en la comunidad no exige verificación. Pueden desactivarla. Las suscripciones son privadas, excluyen pepedm83 y sus alias y se deduplican con los avisos administrativos. No se envían eventos anteriores a la fecha de la preferencia. Toda nueva quedada genera una cola validada; los avisos administrativos siguen limitados a creadores no administradores.
+
+Esta ampliación requiere actualizar Code.gs del proyecto de Apps Script existente, las reglas y el cliente juntos. El envío sigue pendiente de autorización y activación. El botón de calendario puede publicarse de manera independiente.
+
