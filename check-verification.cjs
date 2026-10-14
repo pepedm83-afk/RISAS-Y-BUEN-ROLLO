@@ -1,0 +1,12 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const html=fs.readFileSync('comunidad/index.html','utf8'),src=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1],rules=fs.readFileSync('comunidad/firestore.rules','utf8');
+const ctx={user:null,blocked:false};vm.createContext(ctx);vm.runInContext(src.match(/function verified\(\)\{[^}]*\}/)[0],ctx);
+assert.equal(ctx.verified(),false);ctx.user={emailVerified:false};assert.equal(ctx.verified(),false);ctx.user.emailVerified=true;assert.equal(ctx.verified(),true);ctx.blocked=true;assert.equal(ctx.verified(),false);
+assert(rules.includes('function signedVerified() { return signedIn() && request.auth.token.email_verified == true; }'));
+assert(rules.includes('allow read: if signedIn() && (request.auth.uid == uid'));
+assert(src.includes('if(current.emailVerified){\n   const [profile,grant,request]'));
+assert(!src.includes("if(adminIntent){try{await sendEmailVerification(c.user)"));assert(src.includes('await sendEmailVerification(c.user)'));
+assert(src.includes('await reauthenticateWithCredential(current,EmailAuthProvider.credential'));assert(src.includes('await verifyBeforeUpdateEmail(current,next)'));
+assert(html.includes('https://wa.me/34675805211?'));assert(html.includes('id="confirmEmailLabel"'));assert(src.includes('Los dos correos no coinciden'));
+assert(src.includes("$('viewMine').hidden=!verified()"));
+console.log('OK: correo verificado y bloqueo, lectura de estado antes de verificar, registro general, corrección con reautenticación, doble correo y ayuda pública');

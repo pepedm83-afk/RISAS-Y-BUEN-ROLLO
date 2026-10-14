@@ -57,6 +57,25 @@ service cloud.firestore {
         && request.resource.data.updatedAt == request.time;
       allow delete: if verified() && request.auth.uid == uid;
     }
+    // Device tokens are private: never visible to other members or administrators.
+    match /pushDevices/{id} {
+      allow read: if noticeSender() || (verified() && (!exists(/databases/$(database)/documents/pushDevices/$(id)) || resource.data.uid == request.auth.uid));
+      allow create, update: if verified() && request.resource.data.uid == request.auth.uid
+        && (!exists(/databases/$(database)/documents/pushDevices/$(id)) || resource.data.uid == request.auth.uid)
+        && request.resource.data.keys().hasOnly(['uid','token','enabled','groups','subscribedAt','updatedAt'])
+        && request.resource.data.token is string && request.resource.data.token.size() > 20 && request.resource.data.token.size() <= 4096
+        && request.resource.data.enabled is bool && request.resource.data.groups is list
+        && request.resource.data.groups.size() > 0 && request.resource.data.groups.size() <= 100
+        && request.resource.data.groups.toSet().size() == request.resource.data.groups.size()
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.subscribedAt == request.time || (exists(/databases/$(database)/documents/pushDevices/$(id))
+          && request.resource.data.subscribedAt == resource.data.subscribedAt
+          && request.resource.data.groups == resource.data.groups && resource.data.enabled && request.resource.data.enabled));
+      allow update: if noticeSender() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enabled','updatedAt'])
+        && request.resource.data.enabled == false && request.resource.data.updatedAt is timestamp
+        && request.resource.data.updatedAt >= resource.data.updatedAt && request.resource.data.updatedAt <= request.time;
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
     match /notificationQueue/{id} {
       function assignedCreator() {
         return emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid))
@@ -66,7 +85,8 @@ service cloud.firestore {
       }
       function adminCreator() { return owner() || assignedCreator(); }
       // Requests exist only with a newly created event by a non-admin. Clients cannot select recipients or send arbitrary mail.
-      allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','createdAt','status'])
+      allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','createdAt','status','pushStatus'])
+        && (!('pushStatus' in request.resource.data) || request.resource.data.pushStatus == 'pending')
         && request.resource.data.notifyAdmins == !adminCreator()
         && request.resource.data.eventId == id && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.creatorName == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.name
@@ -74,8 +94,9 @@ service cloud.firestore {
         && !exists(/databases/$(database)/documents/events/$(id))
         && getAfter(/databases/$(database)/documents/events/$(id)).data.createdBy == request.auth.uid;
       allow read: if owner() || noticeSender();
-      allow update: if noticeSender() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','deliveredTo','lastError','lastAttemptAt','completedAt'])
-        && request.resource.data.status in ['pending','waitingContacts','sent','skipped','needsReview'];
+      allow update: if noticeSender() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','deliveredTo','lastError','lastAttemptAt','completedAt','pushStatus','pushDeliveredTo','pushLastError','pushLastAttemptAt','pushCompletedAt'])
+        && request.resource.data.status in ['pending','waitingContacts','sent','skipped','needsReview']
+        && request.resource.data.get('pushStatus','pending') in ['pending','sent','skipped'];
       allow delete: if false;
     }
     match /requests/{uid} {
