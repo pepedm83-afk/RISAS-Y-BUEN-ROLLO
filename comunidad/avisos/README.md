@@ -1,6 +1,6 @@
 # Servicio de avisos
 
-Esta rama prepara la transición a **correos de administración y notificaciones push opcionales por dispositivo**. El código de producción anterior no cambia hasta completar la autorización y publicar esta rama. Consulta [PUSH_SETUP.md](PUSH_SETUP.md) para el estado, los permisos concretos y la prueba de activación.
+Servicio de **correos de administración y notificaciones push opcionales por dispositivo**. Consulta [PUSH_SETUP.md](PUSH_SETUP.md) para el estado, los permisos concretos y la prueba de recepción en móviles.
 
 El remitente sigue siendo `peperisasybuenrollo@gmail.com`; el Gmail antiguo y sus alias quedan excluidos de los correos. `Code.gs` conserva los avisos administrativos cada cinco minutos para nuevas quedadas de participantes, con destinatarios de comunidad y grupo, direcciones privadas, deduplicación y control de cuota.
 
@@ -10,4 +10,4 @@ Los tokens de dispositivos se guardan de forma privada en Firebase. No hay contr
 
 En iPhone se requiere iOS 16.4 o posterior, añadir a pantalla de inicio, abrir desde el icono y permitir notificaciones. Android requiere un navegador compatible y permiso. Cada dispositivo puede desactivarse; cerrar sesión detiene los avisos de esa cuenta en ese dispositivo.
 
-El estado `sent` confirma que el servicio aceptó el envío; la recepción en pantalla se verifica mediante una prueba real. `push-config.json` permanece desactivado y sin clave pública hasta preparar el servidor. La interfaz y agenda antiguas se mantienen separadas.
+El estado `sent` confirma que el servicio aceptó el envío; la recepción en pantalla se verifica mediante una prueba real. La cuenta dedicada tiene el permiso de mensajería y FCM aceptó la validación sin entrega el 14/10/2026 a las 19:26. `push-config.json` contiene solo la clave pública y permite la activación voluntaria por dispositivo. La interfaz y agenda antiguas se mantienen separadas.

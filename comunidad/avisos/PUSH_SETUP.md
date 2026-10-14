@@ -1,6 +1,6 @@
 # Avisos al móvil y correos para administradores
 
-Estado de esta entrega: código preparado; `push-config.json` mantiene `enabled:false` hasta completar autorización y prueba real. No hay claves privadas ni tokens de dispositivos en GitHub. La agenda antigua sigue separada.
+Estado: clave pública creada, reglas publicadas, consentimiento de mensajería concedido y procesador programado cada cinco minutos. El 14/10/2026 a las 19:26 (Madrid), FCM HTTP v1 aceptó la validación de envío desde la cuenta dedicada, sin enviar mensajes. `push-config.json` está habilitado para registrar dispositivos y realizar la prueba real. La recepción física en iPhone y Android todavía debe comprobarse. No hay claves privadas ni tokens de dispositivos en GitHub. La agenda antigua sigue separada.
 
 ## Autorización pendiente, antes de activar
 

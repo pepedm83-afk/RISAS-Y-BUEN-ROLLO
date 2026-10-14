@@ -84,8 +84,25 @@ function procesarPush(){
   }finally{lock.releaseLock();}
 }
 function activarPush(){
+  ScriptApp.requireScopes(ScriptApp.AuthMode.FULL,['https://www.googleapis.com/auth/firebase.messaging']);
   senderGuard_();const token=firebaseToken_();pushPending_(token);listDocuments_('pushDevices',token);
   for(const trigger of ScriptApp.getProjectTriggers())if(trigger.getHandlerFunction()==='procesarPush')ScriptApp.deleteTrigger(trigger);
   ScriptApp.newTrigger('procesarPush').timeBased().everyMinutes(5).create();
   console.log('Procesador push activado. Requiere prueba real en un dispositivo antes de habilitar el botón público.');
+}
+
+// Validate authorization without delivering a message or changing subscriptions.
+function comprobarPermisoPush(){
+  ScriptApp.requireScopes(ScriptApp.AuthMode.FULL,['https://www.googleapis.com/auth/firebase.messaging']);
+  senderGuard_();
+  const response=UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/'+PROJECT_ID+'/messages:send',{
+    method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},
+    payload:JSON.stringify({validate_only:true,message:{topic:'comprobacion-configuracion',data:{type:'config-check'}}}),muteHttpExceptions:true
+  });
+  const code=response.getResponseCode();let result={};try{result=JSON.parse(response.getContentText());}catch{}
+  if(code>=200&&code<300&&result.name)console.log('Permiso push confirmado. Validación correcta; no se ha enviado ninguna notificación.');
+  else {
+    const reason=(result.error?.details||[]).map(d=>d.reason||'').filter(s=>/^[A-Z_]{3,80}$/.test(s)).join(', ');
+    throw Error('No se pudo validar el permiso de envío push (HTTP '+code+(reason?', '+reason:'')+'). Revisar IAM y la autorización de mensajería.');
+  }
 }
