@@ -1,7 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedVerified() { return request.auth != null; }
+    function signedIn() { return request.auth != null; }
+    function signedVerified() { return signedIn() && request.auth.token.email_verified == true; }
     function emailVerified() { return request.auth != null && request.auth.token.email_verified == true; }
     function verified() { return signedVerified() && (!exists(/databases/$(database)/documents/members/$(request.auth.uid)) || get(/databases/$(database)/documents/members/$(request.auth.uid)).data.get('blocked',false) == false); }
     function owner() { return emailVerified() && request.auth.token.email == 'pepedm83@gmail.com'; }
@@ -10,7 +11,7 @@ service cloud.firestore {
     function communityAdmin() { return owner() || (verified() && emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') == 'community'); }
     function managesEvent(id) { let e = get(/databases/$(database)/documents/events/$(id)).data; return verified() && (e.createdBy == request.auth.uid || admin(e.group)); }
     match /members/{uid} {
-      allow read: if signedVerified() && (request.auth.uid == uid || communityAdmin() || noticeSender());
+      allow read: if signedIn() && (request.auth.uid == uid || communityAdmin() || noticeSender());
       allow create, update: if owner() && request.auth.uid != uid && request.resource.data.keys().hasOnly(['blocked']) && request.resource.data.blocked is bool;
       allow delete: if false;
     }
@@ -146,3 +147,4 @@ allow create, update: if unpaid() && verified() && request.auth.uid == uid && ex
     }
   }
 }
+
