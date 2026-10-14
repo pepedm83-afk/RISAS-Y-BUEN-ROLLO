@@ -51,6 +51,6 @@ async function push(data){let done;listeners.push({data:{json:()=>({data})},wait
  const rules=fs.readFileSync(root+'firestore.rules','utf8');assert(rules.includes("request.resource.data.uid == request.auth.uid"));assert(rules.includes("request.resource.data.pushStatus == 'pending'"));
  const mail=fs.readFileSync(root+'avisos/Code.gs','utf8');assert(!mail.includes("listDocuments_('emailSubscriptions'"));assert(!mail.includes('for (const subscription'));
  assert(!main.includes('Mis avisos por email'));assert(main.includes("pushStatus:'pending'"));assert(main.includes('createPushControls'));
- assert.equal(JSON.parse(fs.readFileSync(root+'push-config.json')).enabled,false);
+ const config=JSON.parse(fs.readFileSync(root+'push-config.json'));assert.equal(typeof config.enabled,'boolean');if(config.enabled)assert(/^[A-Za-z0-9_-]{87}$/.test(config.vapidKey));
  console.log('OK: iPhone 16.4/instalación, grupos, baja, bloqueo, sin avisos anteriores, deduplicación, cuentas compartidas, enlace a quedada, colas independientes y correos solo de administración.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
