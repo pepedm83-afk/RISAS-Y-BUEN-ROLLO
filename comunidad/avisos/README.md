@@ -1,16 +1,13 @@
-# Avisos por correo
+# Servicio de avisos
 
-Servicio activo desde el 14 de octubre de 2026. Remitente y buzón de Pepe: peperisasybuenrollo@gmail.com. pepedm83@gmail.com y sus alias de Gmail están excluidos de los avisos.
+Esta rama prepara la transición a **correos de administración y notificaciones push opcionales por dispositivo**. El código de producción anterior no cambia hasta completar la autorización y publicar esta rama. Consulta [PUSH_SETUP.md](PUSH_SETUP.md) para el estado, los permisos concretos y la prueba de activación.
 
-El proyecto de Apps Script «Risas y Buen Rollo · Avisos» funciona bajo el correo dedicado, con un único activador de procesarAvisos cada cinco minutos. Se habilitó Google en Firebase y se autorizó el ID público del cliente OAuth del script. El script no solicita lectura del buzón. No contiene contraseñas, claves privadas ni tokens persistentes.
+El remitente sigue siendo `peperisasybuenrollo@gmail.com`; el Gmail antiguo y sus alias quedan excluidos de los correos. `Code.gs` conserva los avisos administrativos cada cinco minutos para nuevas quedadas de participantes, con destinatarios de comunidad y grupo, direcciones privadas, deduplicación y control de cuota.
 
-Los avisos administrativos se generan únicamente para quedadas nuevas creadas por participantes que no son administradores. Se envían a Pepe, administradores de comunidad y administradores del grupo, excluyendo bloqueados y duplicados. El directorio privado notificationContacts se inició con las 13 direcciones exactas de los administradores registrados. Los futuros administradores sincronizan su dirección verificada al entrar en la comunidad.
+`Push.gs` procesa otra cola cada cinco minutos, sin depender de la cuota de Gmail. Envía únicamente a los dispositivos que hayan elegido el grupo antes de publicarse el evento. No envía eventos cancelados, pasados o de grupos retirados. No genera recordatorios ni avisos de edición.
 
-Los usuarios pueden activar voluntariamente los avisos para grupos seleccionados desde Mi cuenta. Están desactivados por defecto; activar emails exige verificar el correo. Participar no exige verificarlo. La suscripción es privada y se puede desactivar. No se envían quedadas anteriores a la elección de avisos. Los emails individuales no revelan otras direcciones.
+Los tokens de dispositivos se guardan de forma privada en Firebase. No hay contraseñas, claves privadas de servicio ni credenciales persistentes en este repositorio. El envío utiliza un token OAuth temporal con el alcance de mensajería de Firebase; no pide acceso a leer Gmail.
 
-Toda nueva quedada genera una cola atómica validada por reglas. La cola no permite seleccionar destinatarios ni mensajes arbitrarios. El servidor comprueba el evento y el grupo actuales; omite cancelados y grupos eliminados. Consulta la cuota antes de cada envío y reanuda pendientes cuando hay cuota. Si un envío queda sin confirmación, pasa a needsReview para revisión manual sin reenvíos automáticos ambiguos.
+En iPhone se requiere iOS 16.4 o posterior, añadir a pantalla de inicio, abrir desde el icono y permitir notificaciones. Android requiere un navegador compatible y permiso. Cada dispositivo puede desactivarse; cerrar sesión detiene los avisos de esa cuenta en ese dispositivo.
 
-Cada evento ofrece Google Calendar y .ics para otros calendarios, sin solicitar acceso a su cuenta. Duración orientativa: tres horas. La copia no sincroniza modificaciones posteriores.
-
-Code.gs y appsscript.json corresponden al código y los permisos del proyecto. comprobarConfiguracion valida la conexión y cuenta los contactos; activarAvisos reemplaza solo el activador de esta función en este proyecto. probarEnvio manda una única prueba al propio buzón dedicado. La prueba se ejecutó correctamente; no se enviaron pruebas a administradores ni usuarios.
-
+El estado `sent` confirma que el servicio aceptó el envío; la recepción en pantalla se verifica mediante una prueba real. `push-config.json` permanece desactivado y sin clave pública hasta preparar el servidor. La interfaz y agenda antiguas se mantienen separadas.
