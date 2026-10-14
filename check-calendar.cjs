@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const html=fs.readFileSync('comunidad/index.html','utf8'),source=html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+new vm.SourceTextModule(source);
+const ctx={groups:[{id:'rutas',name:'Rutas senderismo'}],window:{location:{origin:'https://example.com',pathname:'/comunidad/'}},TextEncoder};vm.createContext(ctx);
+vm.runInContext(source.slice(source.indexOf('function calendarData('),source.indexOf('function addCalendarControls(')),ctx);
+const event={id:'ruta',group:'rutas',start:'2026-10-25T08:00:00Z',title:'Náquera, paseo; amigos',description:'Primera línea\n'+ '🥾'.repeat(80),location:'El Pastoret',locationURL:'https://maps.example.com/ruta'};
+const c=ctx.calendarData(event);assert.equal(c.start,'20261025T080000Z');assert.equal(c.end,'20261025T110000Z');
+const ics=ctx.calendarICS(event),unfold=ics.replace(/\r\n /g,'');assert(unfold.includes('SUMMARY:Náquera\\, paseo\\; amigos'));assert(unfold.includes('DESCRIPTION:Primera línea\\n'));assert(unfold.includes('DTSTART:20261025T080000Z'));assert(unfold.includes('DTEND:20261025T110000Z'));
+for(const line of ics.split('\r\n'))assert(Buffer.byteLength(line,'utf8')<=75);assert(ics.endsWith('END:VCALENDAR\r\n'));
+assert.throws(()=>ctx.calendarData({...event,start:'invalid'}),/fecha/);
+console.log('OK: JavaScript, horario UTC en cambio de hora, duración 3 h, acentos, saltos, escape y plegado UTF-8 del calendario');
