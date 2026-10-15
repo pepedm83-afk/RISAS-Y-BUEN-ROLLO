@@ -76,6 +76,14 @@ function addCalendarControls(card,e){
 function localStart(iso){const p=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(iso));return p.replace(' ','T')}
 function madridISO(value){let t=Date.parse(value+'Z');for(let i=0;i<3;i++){const wall=localStart(new Date(t).toISOString());t+=Date.parse(value+'Z')-Date.parse(wall+'Z')}if(localStart(new Date(t).toISOString())!==value)throw Error('La hora elegida no existe por el cambio de horario.');return new Date(t).toISOString()}
 function nameKey(value){return encodeURIComponent(value.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('es')).replace(/\./g,'%2E')}
+const REGISTRATION_NOTICES_START=Date.parse('2026-10-15T08:02:41Z');
+async function queueRegistrationNotice(current,name){
+ if(!current?.emailVerified||!name||!verified()||user?.uid!==current.uid)return;
+ const created=Date.parse(current.metadata?.creationTime||'');
+ if(!Number.isFinite(created)||created<REGISTRATION_NOTICES_START)return;
+ try{const notice=doc(db,'registrationNotices',current.uid);await runTransaction(db,async tx=>{if((await tx.get(notice)).exists())return;tx.set(notice,{name,email:current.email,createdAt:serverTimestamp(),status:'pending'});});}
+ catch(error){console.warn('No se pudo registrar el aviso de alta. Se reintentará al volver a entrar.',error.code||'');}
+}
 async function saveUniqueName(next){
  const current=user,clean=next.normalize('NFKC').trim().replace(/\s+/g,' '),key=nameKey(clean);
  if(!verified())throw Error('Verifica primero tu correo.');
@@ -90,6 +98,7 @@ async function saveUniqueName(next){
   tx.set(profileRef,{name:clean,nameKey:key,lastSeen:serverTimestamp()},{merge:true});
   if(oldClaim?.data()?.uid===current.uid)tx.delete(oldRef);
  });
+ await queueRegistrationNotice(current,clean);
  return clean;
 }
 async function reserveExistingNames(rows){
@@ -189,7 +198,7 @@ async function refresh(){
  }
  if(verified())await pushControls.load();
  if(canManageGroups()){if(owner()){await requests();if(token!==generation)return;}await permissions()}
- if(token!==generation)return;await loadEvents();if(token!==generation)return;if(verified())restoreDraft();await selectView('all');openLinkedEvent();if(verified()&&name)await setDoc(doc(db,'profiles',current.uid),{name,lastSeen:serverTimestamp()},{merge:true});if(current?.emailVerified&&(grants.length||community)&&current.email.toLowerCase()!==OWNER)await setDoc(doc(db,'notificationContacts',current.uid),{email:current.email});msg(current?(verified()?'Cuenta cargada.':'Revisa tu correo y confirma tu cuenta.'):'Puedes consultar los eventos sin registrarte.');
+ if(token!==generation)return;await loadEvents();if(token!==generation)return;if(verified())restoreDraft();await selectView('all');openLinkedEvent();if(verified()&&name)await setDoc(doc(db,'profiles',current.uid),{name,lastSeen:serverTimestamp()},{merge:true});if(current?.emailVerified&&(grants.length||community)&&current.email.toLowerCase()!==OWNER)await setDoc(doc(db,'notificationContacts',current.uid),{email:current.email});if(verified()&&name)await queueRegistrationNotice(current,name);msg(current?(verified()?'Cuenta cargada.':'Revisa tu correo y confirma tu cuenta.'):'Puedes consultar los eventos sin registrarte.');
 }
 function openLinkedEvent(){
  const id=new URL(window.location.href).searchParams.get('event');if(!id||! /^[A-Za-z0-9_-]{1,128}$/.test(id))return;
