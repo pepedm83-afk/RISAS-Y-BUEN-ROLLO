@@ -1,0 +1,21 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync('comunidad/index.html','utf8'),service=fs.readFileSync('comunidad/avisos/Registros.gs','utf8');
+const queueSource=html.slice(html.indexOf('const REGISTRATION_NOTICES_START='),html.indexOf('async function saveUniqueName('));
+let writes=[],exists=false,active=true,emails=[],status=[],props=new Map(),quota=10;
+const account={uid:'new-user',emailVerified:true,email:'verified@example.test',metadata:{creationTime:'2026-10-15T09:00:00Z'}};
+const client={Date,Number,console,user:account,verified:()=>active,db:{},doc:(_,collection,id)=>({collection,id}),serverTimestamp:()=>123,runTransaction:async(_,f)=>f({get:async()=>({exists:()=>exists}),set:(ref,data)=>writes.push({ref,data})})};
+vm.createContext(client);vm.runInContext(queueSource,client);
+const server={Date,Set,Object,String,console,NOTICE_SENDER:'peperisasybuenrollo@gmail.com',COMMUNITY_URL:'https://example.test/comunidad/',canonicalEmail_:e=>e.includes('@')?e:'',firestore_:()=>null,decodeFields_:f=>f,deliveryKey_:(id,email)=>id+'|'+email,PropertiesService:{getScriptProperties:()=>({getProperty:k=>props.get(k),setProperty:(k,v)=>props.set(k,v),deleteProperty:k=>props.delete(k)})},MailApp:{getRemainingDailyQuota:()=>quota,sendEmail:e=>emails.push(e)}};
+vm.createContext(server);vm.runInContext(service,server);server.updateRegistration_=(id,data)=>status.push({id,...data});
+(async()=>{
+ await client.queueRegistrationNotice(account,'Ana');assert.equal(writes.length,1);assert.equal(writes[0].data.email,account.email);
+ exists=true;await client.queueRegistrationNotice(account,'Ana');assert.equal(writes.length,1);exists=false;
+ for(const a of [{...account,emailVerified:false},{...account,metadata:{creationTime:'2026-10-01T00:00:00Z'}},{...account,uid:'other'},{...account,metadata:{}}])await client.queueRegistrationNotice(a,'Ana');assert.equal(writes.length,1);
+ active=false;await client.queueRegistrationNotice(account,'Ana');assert.equal(writes.length,1);
+ const notice={id:'new-user',name:'Ana',email:'verified@example.test',createdAt:'2026-10-15T09:00:00Z'};
+ server.processRegistration_(notice,'token');assert.equal(emails.length,1);assert.equal(emails[0].to,server.NOTICE_SENDER);assert.equal(status.at(-1).status,'sent');assert(emails[0].body.includes('Ana'));
+ emails=[];status=[];quota=0;server.processRegistration_(notice,'token');assert.equal(emails.length,0);assert.equal(status.at(-1).status,'pending');
+ quota=10;props.set('registration-new-user|'+server.NOTICE_SENDER,'sending');server.processRegistration_(notice,'token');assert.equal(emails.length,0);assert.equal(status.at(-1).status,'needsReview');
+ props.set('registration-new-user|'+server.NOTICE_SENDER,'sent');server.processRegistration_(notice,'token');assert.equal(emails.length,0);assert.equal(status.at(-1).status,'sent');
+ console.log('OK: solo altas nuevas verificadas, un aviso por cuenta, destinatario único, cuota pendiente y envíos ambiguos sin duplicar.');
+})().catch(e=>{console.error(e);process.exitCode=1});
