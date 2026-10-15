@@ -122,10 +122,19 @@ service cloud.firestore {
     match /events/{id} {
       allow read: if true;
       function https(value) { return value is string && (value == '' || value.matches('https://.*')); }
+      function validMealOption(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
       function validEvent() {
         let d = request.resource.data;
-        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled'])
+        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt'])
           && d.get('cancelled',false) is bool
+          && d.get('mealMenu',[]) is list && d.get('mealMenu',[]).size() <= 6
+          && d.get('mealMenu',[]).toSet().size() == d.get('mealMenu',[]).size()
+          && validMealOption(d.get('mealMenu',[]),0) && validMealOption(d.get('mealMenu',[]),1)
+          && validMealOption(d.get('mealMenu',[]),2) && validMealOption(d.get('mealMenu',[]),3)
+          && validMealOption(d.get('mealMenu',[]),4) && validMealOption(d.get('mealMenu',[]),5)
+          && d.get('mealCloseAt',0) is int && d.get('mealCloseAt',0) >= 0 && d.get('mealCloseAt',0) <= 4102444800000
+          && (d.get('mealMenu',[]).size() == 0 || d.meal != '')
+          && (d.get('mealCloseAt',0) == 0 || d.get('mealMenu',[]).size() > 0)
           && d.title is string && d.title.size() > 0 && d.title.size() <= 150
           && d.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance']
           && d.start is string && d.location is string && d.description is string && d.description.size() <= 5000
@@ -147,6 +156,25 @@ service cloud.firestore {
         allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
 allow create, update: if unpaid() && verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
         allow delete: if verified() && request.auth.uid == uid && unpaid();
+      }
+      // Plate choices are independent of payments; members change only their own reservation.
+      match /mealSelections/{uid} {
+        function event() { return get(/databases/$(database)/documents/events/$(id)).data; }
+        function validChoices() {
+          let e = event();
+          let a = getAfter(/databases/$(database)/documents/events/$(id)/attendees/$(uid)).data;
+          let d = request.resource.data;
+          return !e.get('cancelled',false) && e.get('mealMenu',[]).size() > 0
+            && d.keys().hasOnly(['choices','updatedAt']) && d.choices is list
+            && d.choices.size() == a.mealPeople && d.choices.size() <= 11
+            && d.choices.toSet().hasOnly(e.mealMenu.toSet().union([''].toSet()))
+            && d.updatedAt == request.time;
+        }
+        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        allow create, update: if verified() && (request.auth.uid == uid || managesEvent(id))
+          && validChoices()
+          && (managesEvent(id) || event().get('mealCloseAt',0) == 0 || request.time.toMillis() <= event().mealCloseAt);
+        allow delete: if verified() && request.auth.uid == uid && !existsAfter(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
       }
       match /checkins/{uid} {
         allow read: if verified() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || managesEvent(id));
