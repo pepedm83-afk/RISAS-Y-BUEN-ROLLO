@@ -1,0 +1,18 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('comunidad/index.html','utf8').match(/<script type="module">([\s\S]*?)<\/script>/)[1];
+const c={URL,window:{location:{origin:'https://example.com',pathname:'/comunidad/',search:'?event=otro'}},Date,Map};vm.createContext(c);
+vm.runInContext(source.slice(source.indexOf('function parseMealMenu('),source.indexOf('const paymentLabels=')),c);
+assert.equal(JSON.stringify(c.parseMealMenu(' Carne\n\nPescado\r\nVegetariano ')),JSON.stringify(['Carne','Pescado','Vegetariano']));
+for(const bad of ['Carne\ncarne','a'.repeat(61),'1\n2\n3\n4\n5\n6\n7'])assert.throws(()=>c.parseMealMenu(bad));
+const e={id:'e-test',title:'Comida & amigos',meal:'Restaurante',mealMenu:['Carne','Pescado','Vegetariano'],start:'2026-10-25T12:00:00Z'};
+const rows=[{uid:'ana',name:'Ana',companions:2,mealPeople:3},{uid:'luis',name:'Luis',companions:1,mealPeople:1},{uid:'no',name:'Solo actividad',companions:0,mealPeople:0}];
+const selections=new Map([['ana',{choices:['Carne','Pescado','Carne']}],['luis',{choices:['Vegetariano']}],['borrado',{choices:['Pescado']}]]);
+assert.equal(JSON.stringify(c.mealTotals(e,rows,selections)),JSON.stringify({counts:{Carne:2,Pescado:1,Vegetariano:1},pending:0,total:4}));
+const changed={...e,mealMenu:['Carne','Vegetariano']};assert.equal(c.mealTotals(changed,rows,selections).pending,1);
+assert.equal(c.mealTotals(e,rows.slice(1),selections).total,1);assert.equal(c.mealTotals(e,rows.slice(1),selections).counts.Carne,0);
+assert.equal(c.mealTotals(e,[{uid:'nuevo',mealPeople:2}],selections).pending,2);
+assert.equal(c.mealTotals(e,[{uid:'ana',mealPeople:1}],selections).counts.Carne,1);
+assert.equal(c.mealChoicesOpen({...e,mealCloseAt:1000},1000),true);assert.equal(c.mealChoicesOpen({...e,mealCloseAt:1000},1001),false);assert.equal(c.mealChoicesOpen({...e,cancelled:true},0),false);
+assert.equal(c.eventShareURL(e),'https://example.com/comunidad/?event=e-test');assert(c.eventShareText(e).includes('25 de octubre de 2026'));assert(c.eventShareText(e).includes('https://example.com/comunidad/?event=e-test'));assert(!c.eventShareText(e).includes('Ana'));
+assert(c.mealSummaryText(e,rows,selections).includes('Comensales: 4'));assert(c.mealSummaryText(e,rows,selections).includes('Carne: 2'));assert(!c.mealSummaryText(e,rows,selections).includes('Ana'));
+console.log('OK: totales por comensal, acompañantes, bajas, pendientes, cambio de menú, cierre y anuncio con enlace directo sin asistentes ni pagos.');
