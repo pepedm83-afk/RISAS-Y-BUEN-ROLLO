@@ -3,140 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Risas y Buen Rollo · Agenda</title>
-<link rel="icon" type="image/png" sizes="32x32" href="./favicon.png">
-<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-<link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#7b2cbf">
+<meta name="theme-color" content="#6d00ff">
 <meta name="apple-mobile-web-app-title" content="Risas y Buen Rollo">
+<meta name="description" content="La agenda de Risas y Buen Rollo se ha trasladado. Entra en la nueva app para apuntarte y crear tus propias quedadas.">
+<title>Risas y Buen Rollo · Nos hemos mudado</title>
+<link rel="icon" type="image/png" href="./favicon.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f5f6f8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#202124}
-header{padding:28px 18px;background:linear-gradient(135deg,#7b2cbf,#d13b78);color:#fff}.wrap{max-width:780px;margin:auto}h1{margin:0;font-size:28px}.sub{margin-top:5px;opacity:.92}
-.toolbar{display:flex;gap:8px;overflow:auto;padding:14px}button{border:0;background:#fff;border-radius:999px;padding:9px 13px;white-space:nowrap;box-shadow:0 1px 5px #0001;font-weight:650}
-.month{font-size:22px;font-weight:800;padding:10px 15px}.day{display:grid;grid-template-columns:58px 1fr;gap:9px;padding:6px 14px}.date{text-align:center;font-size:12px;font-weight:700;color:#666}.date b{display:block;font-size:27px;color:#222}
-.card{color:#fff;border-radius:14px;margin-bottom:9px;overflow:hidden;box-shadow:0 3px 10px #0002}.head{padding:14px 15px;cursor:pointer}.head strong{font-size:18px;display:block}.head span{display:block;margin-top:4px}.detail{display:none;background:#fff;color:#333;padding:13px 15px}.card.open .detail{display:block}
-.concert{background:#8e24aa}.route{background:#34834b}.meetup{background:#cf2b1e}.palau{background:#C5A028;color:#202124}.bowling{background:#1565c0}.moto{background:#455a64}.culture{background:#6a1b9a}.wine{background:#8e1538}.travel{background:#00838f}.cinema{background:#536b82} .padel{background:#F9A825;color:#202124}.dance{background:#d81b60}.other{background:#d97706}
-.btn{display:inline-block;margin:4px 5px 2px 0;padding:9px 12px;border-radius:999px;background:#eef0f3;color:#222;text-decoration:none;font-weight:650}
-.state{margin:15px;background:#fff;border-radius:14px;padding:16px;color:#555;box-shadow:0 2px 8px #0001}.hidden{display:none}
+*{box-sizing:border-box}body{margin:0;background:#f5f3fb;color:#242032;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55;padding:32px 18px}main{width:100%;max-width:560px;margin:0 auto;background:#fff;border-radius:24px;box-shadow:0 8px 32px #28124b12;overflow:hidden}.brand{background:linear-gradient(135deg,#4b00bd,#7900ff);padding:26px 24px;color:white;display:flex;align-items:center;gap:15px}.brand img{width:64px;height:64px;border-radius:16px}.brand p{margin:0;font-size:20px;font-weight:750}.content{padding:26px 26px 18px}h1{font-size:clamp(25px,6vw,32px);line-height:1.2;margin:0 0 16px;letter-spacing:-.6px}p{margin:0 0 16px}.intro{font-size:18px}.entry{display:block;background:#6d00ff;color:#fff;text-decoration:none;text-align:center;border-radius:14px;padding:16px 18px;margin:22px 0 12px;font-size:19px;font-weight:750;box-shadow:0 4px 12px #6d00ff22}.entry:hover{background:#5400cc}.entry:focus-visible,summary:focus-visible{outline:3px solid #d8a940;outline-offset:4px}.hint{color:#605a70;font-size:14px}.install{border-top:1px solid #e7e3ed;padding-top:16px;margin-top:22px}details{border:1px solid #e7e3ed;border-radius:12px;margin:10px 0;padding:0 14px}summary{cursor:pointer;font-weight:700;padding:14px 0}ol{padding-left:22px;margin:0 0 16px}li{padding-bottom:8px}.last{background:#fff7e4;border-radius:12px;padding:14px;font-size:14px;margin:18px 0 4px}footer{font-size:13px;color:#605a70;text-align:center;margin:18px auto 0;max-width:520px}@media(max-width:390px){body{padding:16px 12px}.content{padding:22px 18px}.brand{padding:22px 18px}.brand p{font-size:18px}}
 </style>
 </head>
 <body>
-<header><div class="wrap"><h1>😄 Risas y Buen Rollo</h1><div class="sub">Agenda de próximos eventos</div></div></header>
-<main class="wrap">
-<div style="padding:12px 14px 0"><a class="btn" target="_blank" rel="noopener" href="https://calendar.google.com/calendar/embed?src=2d81283f75ae3bfabc2eb176a80992382d586172f3afc62dae40f94664d522a1%40group.calendar.google.com&amp;ctz=Europe%2FMadrid">📅 Ver calendario público</a></div>
-<div class="toolbar">
-<button onclick="filter='all';render()">✨ Todo</button>
-<button onclick="filter='route';render()">🥾 Rutas</button>
-<button onclick="filter='concert';render()">🎸 Conciertos</button>
-<button onclick="filter='meetup';render()">🥳 Quedadas</button>
-<button onclick="filter='palau';render()">🍹 Tardeo Palau</button>
-<button onclick="filter='bowling';render()">🎳 Bolera</button>
-<button onclick="filter='moto';render()">🏍️ Moto</button>
-<button onclick="filter='culture';render()">🎭 Teatro y cultura</button>
-<button onclick="filter='wine';render()">🍷 Catas y bodegas</button>
-<button onclick="filter='travel';render()">✈️ Escapadas y viajes</button>
-<button onclick="filter='cinema';render()">🎬 Cine</button>
-<button onclick="filter='padel';render()">🎾 Pádel</button>
-<button onclick="filter='dance';render()">💃 Salsa y bachata</button>
-</div>
-<div id="status" class="state">Actualizando agenda desde Google Calendar…</div>
-<div id="events"></div>
+<main>
+ <header class="brand"><img src="./comunidad/icon-gold-192.png" width="64" height="64" alt="Carita dorada de Risas y Buen Rollo"><p>Risas y Buen Rollo</p></header>
+ <div class="content">
+  <h1>Nos hemos mudado</h1>
+  <p class="intro">Esta agenda antigua ya no está disponible. Todas las quedadas están en la nueva app.</p>
+  <p>Entra, regístrate y podrás <strong>apuntarte a las quedadas y crear las tuyas</strong>. Confirma tu correo; si no lo ves, revisa Spam.</p>
+  <a class="entry" href="./comunidad/" target="_blank" rel="noopener">Entrar en la nueva app →</a>
+  <p class="hint">Si ya tienes cuenta en la nueva app, entra con tu correo y contraseña. No necesitas registrarte otra vez.</p>
+  <div class="install">
+   <p><strong>Guarda el nuevo icono en tu móvil</strong></p>
+   <details><summary>iPhone · Cómo instalarla</summary><ol><li>Abre la <strong>nueva app en Safari</strong>.</li><li>Pulsa <strong>Compartir</strong> y busca <strong>Añadir a pantalla de inicio</strong>.</li><li>Pulsa <strong>Añadir</strong>. En adelante, entra desde el nuevo icono con la carita dorada.</li></ol></details>
+   <details><summary>Android · Cómo instalarla</summary><ol><li>Abre la <strong>nueva app en Chrome</strong>.</li><li>Abre el menú de los <strong>tres puntos</strong>.</li><li>Pulsa <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong> y confirma.</li></ol></details>
+   <p class="last">Cuando compruebes que el nuevo icono abre la app, puedes quitar el antiguo. Si conservas el icono antiguo, este botón seguirá llevándote a la nueva app.</p>
+  </div>
+ </div>
 </main>
-<script>
-const CAL='2d81283f75ae3bfabc2eb176a80992382d586172f3afc62dae40f94664d522a1@group.calendar.google.com';
-const API_KEY='AIzaSyDuk4wePxeBix_jiZJWEFH2-pRYHr14y48';
-let data=[],filter='all';
-
-// La categoría pertenece a la actividad, nunca al nombre de la sala o artista.
-const CATEGORY_RULES=[
- ['palau',/\btardeos?\s+palau\b/,/🍹/],
- ['padel',/\bpadel\b/,/🎾/],
- ['dance',/\b(salsa|bachata|baile|bailar|kizomba)\b/,/💃|🕺/],
- ['bowling',/\b(bolera|bolos|bowling)\b/,/🎳/],
- ['moto',/\b(moto|motos|motera|motero|motocicleta|motociclismo)\b/,/🏍/],
- ['wine',/\b(cata|catas|bodega|bodegas|vino|vinos|enoturismo)\b/,/🍷/],
- ['culture',/\b(teatro|cultura|museo|museos|exposicion|exposiciones|monologo|monologos|musical)\b/,/🎭/],
- ['cinema',/\b(cine|cinema|pelicula|peliculas)\b/,/🎬|🎥/],
- ['travel',/\b(escapada|escapadas|viaje|viajes|vacaciones)\b/,/✈|🧳/],
- ['route',/\b(ruta|rutas|senderismo|senderista|montana|excursion|excursiones)\b/,/🥾|⛰|🏔/],
- ['concert',/\b(concierto|conciertos|tributo|tributos|musica|rock|festival|festivales|indie|dj|techno|rumba|flamenco)\b/,/🎸|🎵|🎶|🎧|🎤/],
- ['meetup',/\b(quedada|quedadas|cena|cenar|comida|tapas|fiesta|tardeo|domingueo|almuerzo|comer|cafe)\b/,/🥳|🍤|🍽|🍻|🍺|☕/]
-];
-function plainText(value){
- return String(value||'').replace(/<br\s*\/?>|<\/p>|<\/div>/gi,'\n')
-  .replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ')
-  .replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>');
-}
-function normalize(value){
- return plainText(value).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-}
-function categoryFromText(value){
- const text=normalize(value);
- for(const [category,,emoji] of CATEGORY_RULES) if(emoji.test(value||'')) return category;
- for(const [category,words] of CATEGORY_RULES) if(words.test(text)) return category;
- return null;
-}
-function cat(event){
- const title=event.summary||'';
- const description=plainText(event.description);
- const explicit=description.match(/(?:^|\n)\s*(?:categor[ií]a|actividad|tipo)\s*:\s*([^\n]+)/i);
- if(explicit){
-   const category=CATEGORY_RULES.find(([name])=>name===normalize(explicit[1]).trim());
-   const resolved=category?category[0]:categoryFromText(explicit[1]);
-   if(resolved) return resolved;
- }
- const titleCategory=categoryFromText(title);
- if(titleCategory) return titleCategory;
- const activity=description.split('\n')
-  .filter(line=>!/\bgrupo\b|\bsubgrupo\b|\blista\b/i.test(line))
-  .join('\n').replace(/https?:\/\/[^\s]+/g,'');
- return categoryFromText(activity)||'other';
-}
-function icon(c){
- return c==='palau'?'🍹':c==='route'?'🥾':c==='concert'?'🎸':c==='meetup'?'🥳':c==='bowling'?'🎳':c==='moto'?'🏍️':c==='culture'?'🎭':c==='wine'?'🍷':c==='travel'?'✈️':c==='cinema'?'🎬':c==='padel'?'🎾':c==='dance'?'💃':'✨'
-}
-function esc(s){return(s||'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}
-function eventDate(x){return new Date(x.dateTime||x.date)}
-function render(){
- const box=document.querySelector('#events'); box.innerHTML='';
- const shown=data.filter(e=>filter==='all'||e.cat===filter);
- let month='';
- if(!shown.length){box.innerHTML='<div class="state">No hay próximos eventos en esta categoría.</div>';return}
- for(const e of shown){
-   const m=e.start.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
-   if(m!==month){month=m;box.insertAdjacentHTML('beforeend',`<div class="month">${m[0].toUpperCase()+m.slice(1)}</div>`)}
-   const day=document.createElement('div'); day.className='day';
-   const dw=e.start.toLocaleDateString('es-ES',{weekday:'short'}).replace('.','').toUpperCase();
-   const times=e.allDay?'Todo el día':e.start.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
-   const maps=e.loc?`<a class="btn" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.loc)}">📍 Cómo llegar</a>`:'';
-   const links=(e.desc.match(/https?:\/\/[^\s<>]+/g)||[]).map((u,i)=>`<a class="btn" target="_blank" rel="noopener" href="${esc(u)}">🔗 Enlace${i?` ${i+1}`:''}</a>`).join('');
-   day.innerHTML=`<div class="date">${dw}<b>${e.start.getDate()}</b></div><div><div class="card ${e.cat}"><div class="head"><strong>${icon(e.cat)} ${esc(e.title)} </strong><span>${times}${e.loc?' · '+esc(e.loc):''}</span></div><div class="detail">${e.desc?`<p>${esc(e.desc).replace(/\n/g,'<br>')}</p>`:''}${e.loc?`<p>📍 <b>${esc(e.loc)}</b></p>`:''}${maps}${links}<a class="btn" target="_blank" rel="noopener noreferrer" href="https://chat.whatsapp.com/GcoRi9UYCQ60LQuotd4VGK?mode=gi_t">💬 Responder en WhatsApp</a><p style="font-size:13px;color:#666;margin-bottom:0">Abre el grupo de Eventos, busca esta actividad y pulsa «Responder». La asistencia se marca en WhatsApp.</p></div></div></div>`;
-   day.querySelector('.head').onclick=()=>day.querySelector('.card').classList.toggle('open');
-   box.append(day);
- }
-}
-async function loadEvents(){
- try{
-   const timeMin=new Date(); timeMin.setHours(0,0,0,0);
-   const params=new URLSearchParams({key:API_KEY,timeMin:timeMin.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'250',timeZone:'Europe/Madrid'});
-   const url=`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CAL)}/events?${params}`;
-   const r=await fetch(url);
-   if(!r.ok) throw new Error('Calendar API '+r.status);
-   const j=await r.json();
-   data=(j.items||[]).filter(x=>x.status!=='cancelled').map(x=>{
-     const start=eventDate(x.start);
-     return{title:x.summary||'Evento',start,loc:x.location||'',desc:plainText(x.description),htmlLink:x.htmlLink||'',cat:cat(x),allDay:!!x.start?.date};
-   }).filter(e=>!isNaN(e.start)).sort((a,b)=>a.start-b.start);
-   document.querySelector('#status').classList.add('hidden');
-   render();
- }catch(err){
-   console.error(err);
-   document.querySelector('#status').innerHTML='No se ha podido cargar el calendario. Revisa que la clave tenga habilitada Google Calendar API y que este calendario sea público.';
- }
-}
-loadEvents();
-</script>
+<footer>Una sola agenda para compartir más buenos momentos.</footer>
 </body>
 </html>
-
-
