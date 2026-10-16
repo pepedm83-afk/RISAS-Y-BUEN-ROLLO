@@ -316,13 +316,13 @@ function addShareControls(parent,e,g){
  button(actions,'Copiar anuncio',async()=>{if(await copyAnnouncement(text,details))msg('Anuncio copiado con el enlace a esta quedada.');});parent.append(details);
 }
 function mealSummaryText(e,rows,selections){const t=mealTotals(e,rows,selections);return '🍽️ '+e.title+'\n'+(e.meal||'')+'\nComensales: '+t.total+'\n'+Object.entries(t.counts).map(([dish,n])=>dish+': '+n).join('\n')+'\nPendientes de elegir: '+t.pending;}
-async function renderMealPanel(e,rows,parent){
+async function renderMealPanel(e,rows,parent,refreshBox=parent){
  const docs=await getDocs(collection(db,'events',e.id,'mealSelections')),selections=new Map(docs.docs.map(d=>[d.id,d.data()])),totals=mealTotals(e,rows,selections);
  const panel=el('div');panel.className='meal-panel';panel.append(el('h3','🍽️ Comida · '+totals.total+' comensales'));
  const chips=el('div');chips.className='meal-summary';for(const [dish,count] of Object.entries(totals.counts))chips.append(el('span',dish+': '+count));const pending=el('span','Pendientes: '+totals.pending);pending.className='pending';chips.append(pending);panel.append(chips);
  if(e.mealCloseAt)panel.append(el('small',(mealChoicesOpen(e)?'Elección hasta: ':'Elección cerrada desde: ')+new Date(e.mealCloseAt).toLocaleString('es-ES',{timeZone:'Europe/Madrid',dateStyle:'short',timeStyle:'short'})));
  const detail=el('details');detail.append(el('summary','Ver elecciones por persona'));const table=el('table');table.className='meal-table';const head=el('tr');head.append(el('th','Reserva / comensal'),el('th','Plato'));const thead=el('thead');thead.append(head);table.append(thead);const body=el('tbody');
- for(const row of rows.filter(r=>r.mealPeople>0).sort((a,b)=>a.name.localeCompare(b.name,'es'))){const choices=normalizedMealChoices(e,row,selections.get(row.uid));for(let i=0;i<choices.length;i++){const tr=el('tr');tr.append(el('td',row.name+(i?' · comensal '+(i+1):'')),el('td',choices[i]||'Pendiente'));body.append(tr);}if(canManageEvent(e)){const tr=el('tr'),td=el('td');td.colSpan=2;const editor=el('details');editor.append(el('summary','Corregir platos de '+row.name));appendMealChoiceForm(e,{...row,mealPeople:row.actualMealPeople??row.mealPeople},selections.get(row.uid),editor,()=>attendance(e,parent),true);td.append(editor);tr.append(td);body.append(tr);}}
+ for(const row of rows.filter(r=>r.mealPeople>0).sort((a,b)=>a.name.localeCompare(b.name,'es'))){const choices=normalizedMealChoices(e,row,selections.get(row.uid));for(let i=0;i<choices.length;i++){const tr=el('tr');tr.append(el('td',row.name+(i?' · comensal '+(i+1):'')),el('td',choices[i]||'Pendiente'));body.append(tr);}if(canManageEvent(e)){const tr=el('tr'),td=el('td');td.colSpan=2;const editor=el('details');editor.append(el('summary','Corregir platos de '+row.name));appendMealChoiceForm(e,{...row,mealPeople:row.actualMealPeople??row.mealPeople},selections.get(row.uid),editor,()=>attendance(e,refreshBox),true);td.append(editor);tr.append(td);body.append(tr);}}
  table.append(body);detail.append(table);if(!totals.total)detail.append(el('p','Todavía no hay comensales inscritos.'));panel.append(detail);
  if(canManageEvent(e))button(panel,'Copiar resumen para el restaurante',async()=>{if(await copyAnnouncement(mealSummaryText(e,rows,selections),panel))msg('Resumen copiado: platos, totales y pendientes, sin datos de pagos.');});parent.append(panel);return selections;
 }
@@ -405,15 +405,16 @@ async function saveEventWithCapacity(id,values){
 }
 
 const paymentLabels={pending:'Pendiente',reported:'Pago comunicado',confirmed:'Recepción confirmada'};
-async function attendance(e,box){
+async function attendance(e,host){
+ const ticket=(host.rosterGeneration||0)+1;host.rosterGeneration=ticket;const box=el('div');
  const roster=await readAttendance(e.id);e=roster.event;const rows=roster.rows,confirmedRows=roster.confirmed.map(p=>{const r=rows.find(x=>x.uid===p.uid);return {...r,actualMealPeople:r.mealPeople,mealPeople:Math.min(r.mealPeople,p.confirmed)}}),ordered=roster.confirmed.map(p=>rows.find(r=>r.uid===p.uid));
- box.rosterDirty=false;box.replaceChildren();button(box,'Actualizar lista y totales',()=>{rosterCache.delete(e.id);return attendance(e,box);});box.append(el('h3','Confirmados: '+roster.used+(roster.capacity?' / '+roster.capacity+' plazas':' · sin límite')));
+ box.replaceChildren();button(box,'Actualizar lista y totales',()=>{rosterCache.delete(e.id);return attendance(e,host);});box.append(el('h3','Confirmados: '+roster.used+(roster.capacity?' / '+roster.capacity+' plazas':' · sin límite')));
  box.append(el('p','En espera: '+roster.waitingPeople+' personas · '+roster.waiting.length+' reservas o ampliaciones.'));
  box.append(el('small','Se respeta el orden entre las reservas que caben. Una reserva nueva entra completa. Las ampliaciones esperan conservando las plazas ya confirmadas.'));
  if(roster.hasLegacy)box.append(el('small','Hay inscripciones anteriores al registro de turnos. Se conservan sus plazas; su orden original no está disponible.'));
- const mealSelections=e.mealMenu?.length?await renderMealPanel(e,confirmedRows,box):new Map();
+ const mealSelections=e.mealMenu?.length?await renderMealPanel(e,confirmedRows,box,host):new Map();
  if(e.mealMenu?.length){const saved=await getDocs(collection(db,'events',e.id,'mealSelections'));for(const d of saved.docs)mealSelections.set(d.id,d.data());}
- watchAttendance(e,box,roster.revision);
+
  let waitingHeading=false;
  for(const r of ordered){
   const seat=roster.parties.get(r.uid),position=seat.confirmed?roster.confirmed.findIndex(p=>p.uid===r.uid)+1:roster.waiting.findIndex(p=>p.uid===r.uid)+1;
@@ -424,10 +425,10 @@ async function attendance(e,box){
    for(const [kind,label,count,deposit] of [['activity','Actividad',seat.confirmed,e.activityDeposit],['meal','Comida/cena',Math.min(r.mealPeople,seat.confirmed),e.mealDeposit]]){
     if(!deposit||!count)continue;
     const status=payment[kind]||'pending',paymentBox=el('div'),p=el('div');p.className='actions';p.style.gap='8px';p.style.marginBottom='16px';paymentBox.append(el('p',label+': '+(count*deposit).toFixed(2)+' € · '+paymentLabels[status]),p);row.append(paymentBox);
-    if(r.uid===user.uid&&status==='pending')button(p,'He enviado este Bizum',async()=>{await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'reported'},{merge:true});await attendance(e,box);msg('Pago comunicado. Falta confirmación del administrador.')});
+    if(r.uid===user.uid&&status==='pending')button(p,'He enviado este Bizum',async()=>{await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'reported'},{merge:true});await attendance(e,host);msg('Pago comunicado. Falta confirmación del administrador.')});
     if(canManageEvent(e)){
-     if(status!=='confirmed')button(p,'Confirmar recepción',async()=>{if(!confirm('¿Has recibido el Bizum de '+label+' de '+r.name+'?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'confirmed'},{merge:true});await attendance(e,box)});
-     if(status!=='pending')button(p,'Marcar pendiente',async()=>{if(!confirm('¿Volver a pendiente?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'pending'},{merge:true});await attendance(e,box)});
+     if(status!=='confirmed')button(p,'Confirmar recepción',async()=>{if(!confirm('¿Has recibido el Bizum de '+label+' de '+r.name+'?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'confirmed'},{merge:true});await attendance(e,host)});
+     if(status!=='pending')button(p,'Marcar pendiente',async()=>{if(!confirm('¿Volver a pendiente?'))return;await setDoc(doc(db,'events',e.id,'payments',r.uid),{[kind]:'pending'},{merge:true});await attendance(e,host)});
     }
    }
   }
@@ -435,7 +436,7 @@ async function attendance(e,box){
  }
  if(roster.waiting.length){const wait=el('details');wait.open=true;wait.append(el('summary','Lista de espera · '+roster.waitingPeople+' personas'));roster.waiting.forEach((seat,index)=>{const person=rows.find(r=>r.uid===seat.uid);wait.append(el('p',(index+1)+'. '+person.name+' · '+(seat.requested-seat.confirmed)+(seat.requested-seat.confirmed===1?' plaza pendiente':' plazas pendientes')+(seat.confirmed?' · conserva '+seat.confirmed+(seat.confirmed===1?' plaza confirmada':' plazas confirmadas'):' · sin plaza todavía')));});box.append(wait);}
  box.append(el('p','Los importes mostrados corresponden a la reserva actual. Si se han modificado, revisa los Bizum anteriores: la confirmación no verifica automáticamente la cantidad.'));if(e.meal)box.append(el('p','Total comida/cena: '+confirmedRows.reduce((n,r)=>n+r.mealPeople,0)));
- const own=rows.find(r=>r.uid===user.uid),f=el('form');f.addEventListener('input',()=>{box.rosterDirty=true;});
+ const own=rows.find(r=>r.uid===user.uid),f=el('form');f.addEventListener('input',()=>{host.rosterDirty=true;});
  f.innerHTML='<fieldset class="attendance-choice"><legend>¿Quién va?</legend><div class="choices"><label><input type="radio" name="party" value="solo" required>Voy solo</label><label><input type="radio" name="party" value="plus" required>Voy con acompañantes</label></div></fieldset><label class="companion-field" hidden>¿Cuántos acompañantes llevas?<input name="companions" type="number" min="0" max="10" value="" required><small>Sin contarte a ti.</small></label>';
  const companionField=f.querySelector('.companion-field'),companionInput=f.elements.companions;
  companionInput.value=own?.companions>0?own.companions:'';
@@ -453,10 +454,11 @@ async function attendance(e,box){
   const p=(await getDoc(doc(db,'profiles',user.uid))).data();if(!p?.name)throw Error('Guarda primero tu nombre en Tu cuenta.');
   const companions=f.querySelector('input[value="plus"]').checked?Number(f.elements.companions.value):0,mealPeople=Number(f.elements.mealPeople?.value||0);
   if(mealPeople>companions+1)throw Error('El total para comer no puede superar las personas inscritas.');
-  await saveAttendanceParty(e.id,{name:p.name,companions,mealPeople},dishInputs.length===mealPeople?dishInputs.map(x=>x.value):null);myEventIds.add(e.id);await attendance(e,box);msg('Solicitud guardada. Revisa si tienes plaza confirmada o estás en espera.');
+  await saveAttendanceParty(e.id,{name:p.name,companions,mealPeople},dishInputs.length===mealPeople?dishInputs.map(x=>x.value):null);myEventIds.add(e.id);await attendance(e,host);msg('Solicitud guardada. Revisa si tienes plaza confirmada o estás en espera.');
  },save)};
  box.append(f);
- if(own)button(box,'Borrarme',async()=>{await saveAttendanceParty(e.id,null,null,true);myEventIds.delete(e.id);if(view==='mine')render();else await attendance(e,box);msg('Te has borrado. Las plazas libres se asignan a las reservas que caben.');});
+ if(own)button(box,'Borrarme',async()=>{await saveAttendanceParty(e.id,null,null,true);myEventIds.delete(e.id);if(view==='mine')render();else await attendance(e,host);msg('Te has borrado. Las plazas libres se asignan a las reservas que caben.');});
+ if(host.rosterGeneration!==ticket||!host.isConnected)return;host.rosterDirty=false;host.replaceChildren(...box.childNodes);watchAttendance(e,host,roster.revision);
 }
 renderGroupTabs();
 function eventLocationURL(event){const location=(event.location||'').trim();if(event.locationURL)return safeURL(event.locationURL);if(!location||/^(por determinar|lugar (por determinar|pendiente))/i.test(location))return null;return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(location);}
