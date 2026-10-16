@@ -336,16 +336,29 @@ function appendMealChoiceForm(e,row,saved,parent,onSaved,manager=false){
 
 const rosterWatchers=new Set();
 function stopRosterWatchers(){for(const stop of rosterWatchers)stop();rosterWatchers.clear();}
+const rosterCache=new Map();
 async function readAttendance(eventId){
  const ref=doc(db,'events',eventId,'attendanceState','current');
  for(let attempt=0;attempt<3;attempt++){
-  const before=(await getDoc(ref)).data()?.revision||0;
-  const [event,attendees,changes]=await Promise.all([getDoc(doc(db,'events',eventId)),getDocs(collection(db,'events',eventId,'attendees')),getDocs(collection(db,'events',eventId,'attendanceChanges'))]);
-  const after=(await getDoc(ref)).data()?.revision||0;if(before!==after)continue;
+  const before=(await getDoc(ref)).data()?.revision||0,cached=rosterCache.get(eventId),usable=cached?.uid===user.uid&&cached.revision<=before;
+  let rows,ops;const event=await getDoc(doc(db,'events',eventId));
   if(!event.exists())throw Error('La quedada ya no está disponible.');
-  const rows=attendees.docs.map(d=>({uid:d.id,...d.data()})),ops=changes.docs.map(d=>d.data());
-  if(ops.length!==after)throw Error('No se ha podido cargar la lista completa. Pulsa Actualizar lista y totales.');
-  const e={id:eventId,...event.data()};return {event:e,rows,ops,revision:after,...allocateAttendance(rows,ops,e.capacity||0)};
+  if(usable){
+   rows=new Map(cached.rows.map(r=>[r.uid,r]));ops=[...cached.ops];
+   if(before>cached.revision){const changes=await getDocs(query(collection(db,'events',eventId,'attendanceChanges'),where('seq','>',cached.revision))),more=changes.docs.map(d=>d.data());
+    const affected=[...new Set(more.filter(op=>op.kind!=='capacity').map(op=>op.uid))];
+    await Promise.all(affected.map(async uid=>{const row=await getDoc(doc(db,'events',eventId,'attendees',uid));if(row.exists())rows.set(uid,{uid,...row.data()});else rows.delete(uid);}));
+    ops=[...new Map([...ops,...more].map(op=>[op.seq,op])).values()];
+   }
+   rows=[...rows.values()];
+  }else{
+   const [attendees,changes]=await Promise.all([getDocs(collection(db,'events',eventId,'attendees')),getDocs(collection(db,'events',eventId,'attendanceChanges'))]);
+   rows=attendees.docs.map(d=>({uid:d.id,...d.data()}));ops=changes.docs.map(d=>d.data());
+  }
+  const after=(await getDoc(ref)).data()?.revision||0;if(before!==after)continue;
+  if(ops.length!==after){rosterCache.delete(eventId);continue;}
+  const e={id:eventId,...event.data()};rosterCache.set(eventId,{uid:user.uid,rows,ops,revision:after});
+  return {event:e,rows,ops,revision:after,...allocateAttendance(rows,ops,e.capacity||0)};
  }
  throw Error('La lista acaba de cambiar. Vuelve a actualizarla.');
 }
@@ -394,7 +407,7 @@ async function saveEventWithCapacity(id,values){
 const paymentLabels={pending:'Pendiente',reported:'Pago comunicado',confirmed:'Recepción confirmada'};
 async function attendance(e,box){
  const roster=await readAttendance(e.id);e=roster.event;const rows=roster.rows,confirmedRows=roster.confirmed.map(p=>{const r=rows.find(x=>x.uid===p.uid);return {...r,actualMealPeople:r.mealPeople,mealPeople:Math.min(r.mealPeople,p.confirmed)}}),ordered=roster.confirmed.map(p=>rows.find(r=>r.uid===p.uid));
- box.rosterDirty=false;box.replaceChildren();button(box,'Actualizar lista y totales',()=>attendance(e,box));box.append(el('h3','Confirmados: '+roster.used+(roster.capacity?' / '+roster.capacity+' plazas':' · sin límite')));
+ box.rosterDirty=false;box.replaceChildren();button(box,'Actualizar lista y totales',()=>{rosterCache.delete(e.id);return attendance(e,box);});box.append(el('h3','Confirmados: '+roster.used+(roster.capacity?' / '+roster.capacity+' plazas':' · sin límite')));
  box.append(el('p','En espera: '+roster.waitingPeople+' personas · '+roster.waiting.length+' reservas o ampliaciones.'));
  box.append(el('small','Se respeta el orden entre las reservas que caben. Una reserva nueva entra completa. Las ampliaciones esperan conservando las plazas ya confirmadas.'));
  if(roster.hasLegacy)box.append(el('small','Hay inscripciones anteriores al registro de turnos. Se conservan sus plazas; su orden original no está disponible.'));
