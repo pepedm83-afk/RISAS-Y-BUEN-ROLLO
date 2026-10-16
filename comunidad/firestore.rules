@@ -125,8 +125,8 @@ service cloud.firestore {
       function validMealOption(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
       function validEvent() {
         let d = request.resource.data;
-        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt'])
-          && d.get('cancelled',false) is bool
+        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity'])
+          && d.get('cancelled',false) is bool && d.get('capacity',0) is int && d.get('capacity',0) >= 0 && d.get('capacity',0) <= 1000
           && d.get('mealMenu',[]) is list && d.get('mealMenu',[]).size() <= 6
           && d.get('mealMenu',[]).toSet().size() == d.get('mealMenu',[]).size()
           && validMealOption(d.get('mealMenu',[]),0) && validMealOption(d.get('mealMenu',[]),1)
@@ -148,14 +148,71 @@ service cloud.firestore {
       }
       allow create: if verified() && validEvent() && request.resource.data.createdBy == request.auth.uid;
       // Creators manage their own events; group admins may move events only between their groups.
-      allow update: if verified() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy;
+      allow update: if verified() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
       // The app cancels by setting cancelled=true, preserving registrations and history.
       allow delete: if admin(resource.data.group);
+      function latestMovement() {
+        let state = getAfter(/databases/$(database)/documents/events/$(id)/attendanceState/current).data;
+        return getAfter(/databases/$(database)/documents/events/$(id)/attendanceChanges/$(state.lastChange)).data;
+      }
+      function movementFor(uid,kind,people) {
+        let op = latestMovement();
+        return op.actor == request.auth.uid && op.uid == uid && op.kind == kind && op.people == people && op.createdAt == request.time;
+      }
+      function capacityMovement() { return movementFor(request.auth.uid,'capacity',0); }
+      match /attendanceState/{stateId} {
+        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        function validState() {
+          let d = request.resource.data;
+          let op = getAfter(/databases/$(database)/documents/events/$(id)/attendanceChanges/$(d.lastChange)).data;
+          return stateId == 'current' && d.keys().hasOnly(['revision','lastChange','updatedAt'])
+            && d.revision is int && d.lastChange is string && d.lastChange.size() > 0
+            && d.updatedAt == request.time && op.seq == d.revision && op.actor == request.auth.uid && op.createdAt == request.time;
+        }
+        allow create: if verified() && validState() && request.resource.data.revision == 1;
+        allow update: if verified() && validState() && request.resource.data.revision == resource.data.revision + 1;
+        allow delete: if false;
+      }
+      match /attendanceChanges/{changeId} {
+        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        function validMovement() {
+          let d = request.resource.data;
+          let before = get(/databases/$(database)/documents/events/$(id)).data;
+          let after = getAfter(/databases/$(database)/documents/events/$(id)).data;
+          let state = getAfter(/databases/$(database)/documents/events/$(id)/attendanceState/current).data;
+          return d.keys().hasOnly(['seq','actor','uid','kind','people','legacyPeople','limitBefore','limitAfter','createdAt'])
+            && d.seq is int && d.seq > 0 && state.revision == d.seq && state.lastChange == changeId
+            && d.actor == request.auth.uid && d.uid == request.auth.uid && d.createdAt == request.time
+            && d.people is int && d.legacyPeople is int && d.legacyPeople >= 0 && d.legacyPeople <= 11
+            && d.limitBefore == before.get('capacity',0) && d.limitAfter == after.get('capacity',0)
+            && (d.kind == 'capacity' ? (managesEvent(id) && d.people == 0 && d.legacyPeople == 0 && d.limitBefore != d.limitAfter) : validPartyMovement(d));
+        }
+        function validPartyMovement(d) {
+          let path = /databases/$(database)/documents/events/$(id)/attendees/$(d.uid);
+          let present = exists(path);
+          let legacy = present && get(path).data.get('joinedOrder',0) == 0;
+          return d.limitBefore == d.limitAfter
+            && d.legacyPeople == (legacy ? get(path).data.companions + 1 : 0)
+            && (d.kind == 'leave' ? (present && !existsAfter(path) && d.people == 0)
+              : (d.kind in ['join','change'] && (d.kind == 'join' ? !present : present)
+              && existsAfter(path) && d.people == getAfter(path).data.companions + 1 && d.people >= 1 && d.people <= 11));
+        }
+        allow create: if verified() && validMovement();
+        allow update, delete: if false;
+      }
       match /attendees/{uid} {
+        function validAttendanceOrder(uid) {
+          let d = request.resource.data;
+          let present = exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
+          let op = latestMovement();
+          return (present
+            ? (d.get('joinedOrder',0) == resource.data.get('joinedOrder',0) && d.get('joinedAt',null) == resource.data.get('joinedAt',null) && movementFor(uid,'change',d.companions+1))
+            : (d.joinedAt == request.time && d.joinedOrder == op.seq && movementFor(uid,'join',d.companions+1)));
+        }
         function unpaid() { return !exists(/databases/$(database)/documents/events/$(id)/payments/$(uid)) || (get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('activity','pending') == 'pending' && get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('meal','pending') == 'pending'); }
         allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
-allow create, update: if unpaid() && verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
-        allow delete: if verified() && request.auth.uid == uid && unpaid();
+allow create, update: if validAttendanceOrder(uid) && unpaid() && verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople','joinedOrder','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
+        allow delete: if verified() && request.auth.uid == uid && unpaid() && movementFor(uid,'leave',0);
       }
       // Plate choices are independent of payments; members change only their own reservation.
       match /mealSelections/{uid} {
@@ -211,4 +268,5 @@ allow create, update: if unpaid() && verified() && request.auth.uid == uid && ex
     }
   }
 }
+
 
