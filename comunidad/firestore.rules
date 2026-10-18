@@ -219,6 +219,11 @@ service cloud.firestore {
       }
       allow create: if participant() && validEvent() && request.resource.data.createdBy == request.auth.uid;
       // Creators manage their own events; group admins may move events only between their groups.
+      // The trusted timer may fill an absent finish time after the event day ends.
+      allow update: if noticeSender() && resource.data.get('endAt',0) == 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['endAt'])
+        && request.resource.data.endAt is int && request.resource.data.endAt > 0
+        && request.resource.data.endAt <= request.time.toMillis();
       allow update: if participant() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
       // The app cancels by setting cancelled=true, preserving registrations and history.
       allow delete: if admin(resource.data.group);
