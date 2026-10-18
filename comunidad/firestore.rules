@@ -5,11 +5,51 @@ service cloud.firestore {
     function signedVerified() { return signedIn() && request.auth.token.email_verified == true; }
     function emailVerified() { return request.auth != null && request.auth.token.email_verified == true; }
     function verified() { return signedVerified() && (!exists(/databases/$(database)/documents/members/$(request.auth.uid)) || get(/databases/$(database)/documents/members/$(request.auth.uid)).data.get('blocked',false) == false); }
+    function participant() {
+      return verified() && (owner() || noticeSender() || (
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('phone','') != ''
+        && ((exists(/databases/$(database)/documents/membershipReviews/$(request.auth.uid))
+          && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.active == true
+          && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.phone == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.phone)
+          || exists(/databases/$(database)/documents/grants/$(request.auth.uid)))));
+    }
+    match /membershipReviews/{uid} {
+      allow read: if verified() && (request.auth.uid == uid || communityAdmin());
+      allow create, update: if communityAdmin()
+        && request.resource.data.keys().hasOnly(['active','phone','reviewedAt','reviewedBy'])
+        && request.resource.data.active is bool && request.resource.data.phone is string
+        && request.resource.data.phone == get(/databases/$(database)/documents/profiles/$(uid)).data.phone
+        && request.resource.data.phone.matches('[+][1-9][0-9]{7,14}')
+        && request.resource.data.reviewedAt == request.time && request.resource.data.reviewedBy == request.auth.uid;
+      allow delete: if false;
+    }
+    // Feedback is identified for community admins and never visible to other members.
+    match /eventFeedback/{feedbackId} {
+      allow read: if communityAdmin();
+      allow create: if participant()
+        && request.resource.data.keys().hasOnly(['eventId','uid','overall','organization','venue','price','incident','comment','createdAt']) && request.resource.data.uid == request.auth.uid
+        && request.resource.data.eventId is string
+        && request.resource.data.overall in ['Excelente','Bien','Regular','Mal']
+        && request.resource.data.organization in ['Excelente','Bien','Regular','Mal']
+        && request.resource.data.venue in ['','Excelente','Bien','Regular','Mal']
+        && request.resource.data.price in ['Adecuado','Caro','No corresponde']
+        && request.resource.data.incident is bool
+        && request.resource.data.comment is string && request.resource.data.comment.size() <= 1500
+        && request.resource.data.createdAt == request.time
+        && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('endAt',4102444800000) <= request.time.toMillis()
+        && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 604800000
+        && !get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('cancelled',false)
+        && exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)/attendees/$(request.auth.uid))
+        && !exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid)).data.feedbackId == feedbackId;
+      allow update, delete: if false;
+    }
     function owner() { return emailVerified() && request.auth.token.email == 'pepedm83@gmail.com'; }
     function noticeSender() { return verified() && emailVerified() && request.auth.token.email == 'peperisasybuenrollo@gmail.com'; }
     function admin(group) { return owner() || (verified() && emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && (get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role', 'group') == 'community' || group in get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.groups)); }
     function communityAdmin() { return owner() || (verified() && emailVerified() && exists(/databases/$(database)/documents/grants/$(request.auth.uid)) && get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('role','group') == 'community'); }
-    function managesEvent(id) { let e = get(/databases/$(database)/documents/events/$(id)).data; return verified() && (e.createdBy == request.auth.uid || admin(e.group)); }
+    function managesEvent(id) { let e = get(/databases/$(database)/documents/events/$(id)).data; return participant() && (e.createdBy == request.auth.uid || admin(e.group)); }
     match /members/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || communityAdmin() || noticeSender());
       allow create, update: if owner() && request.auth.uid != uid && request.resource.data.keys().hasOnly(['blocked']) && request.resource.data.blocked is bool;
@@ -17,7 +57,7 @@ service cloud.firestore {
     }
     match /profiles/{uid} {
       allow read: if verified() && (request.auth.uid == uid || communityAdmin());
-      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','nameKey','lastSeen']) && (!('lastSeen' in request.resource.data) || request.resource.data.lastSeen == request.time || (exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.lastSeen == resource.data.get('lastSeen',null))) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.name == resource.data.name && request.resource.data.get('nameKey','') == resource.data.get('nameKey','')) || (request.resource.data.nameKey is string && request.resource.data.nameKey.size() > 0 && getAfter(/databases/$(database)/documents/nameClaims/$(request.resource.data.nameKey)).data.uid == uid));
+      allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','nameKey','lastSeen','phone','phoneCountry']) && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.matches('[+][1-9][0-9]{7,14}') && request.resource.data.phoneCountry is string && request.resource.data.phoneCountry.matches('[+][1-9][0-9]{0,2}'))) && (!('lastSeen' in request.resource.data) || request.resource.data.lastSeen == request.time || (exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.lastSeen == resource.data.get('lastSeen',null))) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.name == resource.data.name && request.resource.data.get('nameKey','') == resource.data.get('nameKey','')) || (request.resource.data.nameKey is string && request.resource.data.nameKey.size() > 0 && getAfter(/databases/$(database)/documents/nameClaims/$(request.resource.data.nameKey)).data.uid == uid));
       allow delete: if verified() && request.auth.uid == uid;
     }
     // One private registration notice per verified account, addressed only to the owner mailbox.
@@ -41,6 +81,14 @@ service cloud.firestore {
       allow create: if owner() || (verified() && request.resource.data.keys().hasOnly(['uid']) && request.resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.nameKey == key);
       allow update: if false;
       allow delete: if verified() && resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('nameKey','') != key;
+    }
+    match /settings/{id} {
+      allow read: if id == 'community';
+      allow create, update: if id == 'community' && communityAdmin()
+        && request.resource.data.keys().hasOnly(['announcementGroupURL'])
+        && request.resource.data.announcementGroupURL is string
+        && request.resource.data.announcementGroupURL.matches('https://chat[.]whatsapp[.]com/.*');
+      allow delete: if false;
     }
     match /groups/{id} {
       allow read: if true;
@@ -99,10 +147,11 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/grants/$(request.auth.uid)).data.get('groups',[]).size() > 0));
       }
       function adminCreator() { return owner() || assignedCreator(); }
-      // Requests exist only with a newly created event by a non-admin. Clients cannot select recipients or send arbitrary mail.
-      allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','createdAt','status','pushStatus'])
+      // Every new event queues a notice. The sender resolves recipients from actual roles, never client-selected mailboxes.
+      allow create: if verified() && request.resource.data.keys().hasOnly(['eventId','createdBy','creatorName','notifyAdmins','creatorIsAdmin','createdAt','status','pushStatus'])
         && (!('pushStatus' in request.resource.data) || request.resource.data.pushStatus == 'pending')
-        && request.resource.data.notifyAdmins == !adminCreator()
+        && request.resource.data.notifyAdmins is bool
+        && (!('creatorIsAdmin' in request.resource.data) || request.resource.data.creatorIsAdmin == adminCreator())
         && request.resource.data.eventId == id && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.creatorName == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.name
         && request.resource.data.createdAt == request.time && request.resource.data.status == 'pending'
@@ -125,7 +174,8 @@ service cloud.firestore {
       function validMealOption(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
       function validEvent() {
         let d = request.resource.data;
-        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity'])
+        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity','endAt'])
+          && d.get('endAt',0) is int && d.get('endAt',0) >= 0 && d.get('endAt',0) <= 4102444800000
           && d.get('cancelled',false) is bool && d.get('capacity',0) is int && d.get('capacity',0) >= 0 && d.get('capacity',0) <= 1000
           && d.get('mealMenu',[]) is list && d.get('mealMenu',[]).size() <= 6
           && d.get('mealMenu',[]).toSet().size() == d.get('mealMenu',[]).size()
@@ -146,9 +196,9 @@ service cloud.firestore {
           && (d.meal != '' || (d.get('mealDeposit',0) == 0 && d.get('restaurantURL','') == '' && d.get('mealTime','') == ''))
           && exists(/databases/$(database)/documents/groups/$(d.group));
       }
-      allow create: if verified() && validEvent() && request.resource.data.createdBy == request.auth.uid;
+      allow create: if participant() && validEvent() && request.resource.data.createdBy == request.auth.uid;
       // Creators manage their own events; group admins may move events only between their groups.
-      allow update: if verified() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
+      allow update: if participant() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
       // The app cancels by setting cancelled=true, preserving registrations and history.
       allow delete: if admin(resource.data.group);
       function latestMovement() {
@@ -160,8 +210,22 @@ service cloud.firestore {
         return op.actor == request.auth.uid && op.uid == uid && op.kind == kind && op.people == people && op.createdAt == request.time;
       }
       function capacityMovement() { return movementFor(request.auth.uid,'capacity',0); }
+      match /feedbackReceipts/{uid} {
+        allow read: if verified() && request.auth.uid == uid;
+        allow create: if participant() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['feedbackId','createdAt'])
+          && request.resource.data.feedbackId is string && request.resource.data.createdAt == request.time
+          && !exists(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId))
+          && getAfter(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId)).data.eventId == id
+          && getAfter(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId)).data.createdAt == request.time
+          && get(/databases/$(database)/documents/events/$(id)).data.get('endAt',4102444800000) <= request.time.toMillis()
+          && request.time.toMillis() < get(/databases/$(database)/documents/events/$(id)).data.endAt + 604800000
+          && !get(/databases/$(database)/documents/events/$(id)).data.get('cancelled',false)
+          && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
+        allow update, delete: if false;
+      }
       match /attendanceState/{stateId} {
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
         function validState() {
           let d = request.resource.data;
           let op = getAfter(/databases/$(database)/documents/events/$(id)/attendanceChanges/$(d.lastChange)).data;
@@ -169,12 +233,12 @@ service cloud.firestore {
             && d.revision is int && d.lastChange is string && d.lastChange.size() > 0
             && d.updatedAt == request.time && op.seq == d.revision && op.actor == request.auth.uid && op.createdAt == request.time;
         }
-        allow create: if verified() && validState() && request.resource.data.revision == 1;
-        allow update: if verified() && validState() && request.resource.data.revision == resource.data.revision + 1;
+        allow create: if participant() && validState() && request.resource.data.revision == 1;
+        allow update: if participant() && validState() && request.resource.data.revision == resource.data.revision + 1;
         allow delete: if false;
       }
       match /attendanceChanges/{changeId} {
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
         function validMovement() {
           let d = request.resource.data;
           let before = get(/databases/$(database)/documents/events/$(id)).data;
@@ -197,7 +261,7 @@ service cloud.firestore {
               : (d.kind in ['join','change'] && (d.kind == 'join' ? !present : present)
               && existsAfter(path) && d.people == getAfter(path).data.companions + 1 && d.people >= 1 && d.people <= 11));
         }
-        allow create: if verified() && validMovement();
+        allow create: if participant() && validMovement();
         allow update, delete: if false;
       }
       match /attendees/{uid} {
@@ -210,9 +274,9 @@ service cloud.firestore {
             : (d.joinedAt == request.time && d.joinedOrder == op.seq && movementFor(uid,'join',d.companions+1)));
         }
         function unpaid() { return !exists(/databases/$(database)/documents/events/$(id)/payments/$(uid)) || (get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('activity','pending') == 'pending' && get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('meal','pending') == 'pending'); }
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
-allow create, update: if validAttendanceOrder(uid) && unpaid() && verified() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople','joinedOrder','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
-        allow delete: if verified() && request.auth.uid == uid && unpaid() && movementFor(uid,'leave',0);
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
+allow create, update: if validAttendanceOrder(uid) && unpaid() && participant() && request.auth.uid == uid && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople','joinedOrder','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
+        allow delete: if participant() && request.auth.uid == uid && unpaid() && movementFor(uid,'leave',0);
       }
       // Plate choices are independent of payments; members change only their own reservation.
       match /mealSelections/{uid} {
@@ -227,14 +291,14 @@ allow create, update: if validAttendanceOrder(uid) && unpaid() && verified() && 
             && d.choices.toSet().hasOnly(e.mealMenu.toSet().union([''].toSet()))
             && d.updatedAt == request.time;
         }
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id));
-        allow create, update: if verified() && (request.auth.uid == uid || managesEvent(id))
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
+        allow create, update: if participant() && (request.auth.uid == uid || managesEvent(id))
           && validChoices()
           && (managesEvent(id) || event().get('mealCloseAt',0) == 0 || request.time.toMillis() <= event().mealCloseAt);
-        allow delete: if verified() && request.auth.uid == uid && !existsAfter(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
+        allow delete: if participant() && request.auth.uid == uid && !existsAfter(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
       }
       match /checkins/{uid} {
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || managesEvent(id));
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || managesEvent(id));
         allow create, update: if managesEvent(id) && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid)) && request.resource.data.keys().hasOnly(['present']) && request.resource.data.present is bool;
         allow delete: if false;
       }
@@ -249,8 +313,8 @@ allow create, update: if validAttendanceOrder(uid) && unpaid() && verified() && 
           return request.resource.data.get(kind,'pending') == resource.data.get(kind,'pending') ||
             (eligible(kind) && request.resource.data.get(kind,'pending') == 'reported' && resource.data.get(kind,'pending') != 'confirmed');
         }
-        allow read: if verified() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || eventAdmin());
-        allow create: if verified() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
+        allow read: if participant() && exists(/databases/$(database)/documents/events/$(id)) && (request.auth.uid == uid || eventAdmin());
+        allow create: if participant() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
           && request.resource.data.keys().hasOnly(['activity','meal'])
           && request.resource.data.get('activity','pending') in ['pending','reported','confirmed']
           && request.resource.data.get('meal','pending') in ['pending','reported','confirmed']
@@ -259,7 +323,7 @@ allow create, update: if validAttendanceOrder(uid) && unpaid() && verified() && 
             && request.resource.data.get('meal','pending') in ['pending','reported']
             && (request.resource.data.get('activity','pending') == 'pending' || eligible('activity'))
             && (request.resource.data.get('meal','pending') == 'pending' || eligible('meal'))));
-        allow update: if verified() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
+        allow update: if participant() && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid))
           && request.resource.data.keys().hasOnly(['activity','meal'])
           && request.resource.data.get('activity','pending') in ['pending','reported','confirmed']
           && request.resource.data.get('meal','pending') in ['pending','reported','confirmed']
