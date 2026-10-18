@@ -93,10 +93,10 @@ function pendingRequests_(token) {
   return result.filter(row => row.document).map(row => Object.assign({id: row.document.name.split('/').pop()}, decodeFields_(row.document.fields)));
 }
 
-function resolveRecipients_(grants, groupId, contacts, blockedIds) {
+function resolveRecipients_(grants, groupId, contacts, blockedIds, includeGroupAdmins = true) {
   const recipients = new Map([[NOTICE_SENDER, NOTICE_SENDER]]), missing = [];
   for (const grant of grants) {
-    if (blockedIds.has(grant.id) || !(grant.role === 'community' || (grant.groups || []).includes(groupId))) continue;
+    if (blockedIds.has(grant.id) || !(grant.role === 'community' || (includeGroupAdmins && (grant.groups || []).includes(groupId)))) continue;
     const raw = contacts[grant.id], key = canonicalEmail_(raw);
     if (!key) { missing.push(grant.id); continue; }
     if (key === EXCLUDED_MAILBOX) continue;
@@ -131,8 +131,10 @@ function processRequest_(queue, grants, token, subscriptions) {
     const contact = firestore_('/notificationContacts/' + encodeURIComponent(grant.id), token);
     if (contact) contacts[grant.id] = decodeFields_(contact.fields).email;
   }
-  const alertAdmins = queue.notifyAdmins !== false;
-  const routing = alertAdmins ? resolveRecipients_(grants, event.group, contacts, blocked) : {recipients: [], missing: []};
+  // Community admins and the dedicated owner mailbox are always notified.
+  // Group admins additionally receive events created by ordinary participants.
+  const adminCreated = queue.creatorIsAdmin === true || grants.some(g => g.id === event.createdBy && (g.role === 'community' || (g.groups || []).length > 0));
+  const routing = resolveRecipients_(grants, event.group, contacts, blocked, !adminCreated);
   // User notices now use push. Email is reserved for administrative routing.
   const delivered = new Set(queue.deliveredTo || []), props = PropertiesService.getScriptProperties();
   for (const recipient of routing.recipients) {
