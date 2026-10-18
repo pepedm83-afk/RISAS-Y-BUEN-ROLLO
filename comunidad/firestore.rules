@@ -24,6 +24,13 @@ service cloud.firestore {
         && request.resource.data.reviewedAt == request.time && request.resource.data.reviewedBy == request.auth.uid;
       allow delete: if false;
     }
+    function feedbackSeat(eventId,uid) {
+      let path = /databases/$(database)/documents/events/$(eventId);
+      let seat = get(/databases/$(database)/documents/events/$(eventId)/feedbackEligibility/$(uid)).data;
+      let revision = exists(/databases/$(database)/documents/events/$(eventId)/attendanceState/current) ? get(/databases/$(database)/documents/events/$(eventId)/attendanceState/current).data.revision : 0;
+      return seat.admitted == true && seat.revision == revision && seat.endAt == get(path).data.endAt
+        && (!exists(/databases/$(database)/documents/events/$(eventId)/checkins/$(uid)) || get(/databases/$(database)/documents/events/$(eventId)/checkins/$(uid)).data.present != false);
+    }
     // Feedback is identified for community admins and never visible to other members.
     match /eventFeedback/{feedbackId} {
       allow read: if communityAdmin();
@@ -40,8 +47,7 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('endAt',4102444800000) <= request.time.toMillis()
         && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 604800000
         && !get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('cancelled',false)
-        && exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)/attendees/$(request.auth.uid))
-        && !exists(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid))
+        && feedbackSeat(request.resource.data.eventId,request.auth.uid)
         && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid)).data.feedbackId == feedbackId;
       allow update, delete: if false;
     }
@@ -70,6 +76,21 @@ service cloud.firestore {
         && request.resource.data.email is string && request.resource.data.email.size() <= 254
         && request.resource.data.name == get(/databases/$(database)/documents/profiles/$(uid)).data.name
         && request.resource.data.createdAt == request.time && request.resource.data.status == 'pending';
+      allow update: if noticeSender()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','lastError','lastAttemptAt','completedAt'])
+        && request.resource.data.status in ['pending','sent','skipped','needsReview'];
+      allow delete: if false;
+    }
+    match /phoneNotices/{uid} {
+      allow read: if verified() && (request.auth.uid == uid || communityAdmin() || noticeSender());
+      allow create, update: if verified() && (request.auth.uid == uid || communityAdmin())
+        && request.resource.data.keys().hasOnly(['uid','name','phone','createdAt','status'])
+        && request.resource.data.uid == uid && request.resource.data.status == 'pending'
+        && request.resource.data.name == getAfter(/databases/$(database)/documents/profiles/$(uid)).data.name
+        && request.resource.data.phone == getAfter(/databases/$(database)/documents/profiles/$(uid)).data.phone
+        && request.resource.data.phone.matches('[+][1-9][0-9]{7,14}')
+        && request.resource.data.createdAt == request.time
+        && (!exists(/databases/$(database)/documents/phoneNotices/$(uid)) || resource.data.phone != request.resource.data.phone);
       allow update: if noticeSender()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','lastError','lastAttemptAt','completedAt'])
         && request.resource.data.status in ['pending','sent','skipped','needsReview'];
@@ -218,11 +239,19 @@ service cloud.firestore {
           && !exists(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId))
           && getAfter(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId)).data.eventId == id
           && getAfter(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId)).data.createdAt == request.time
-          && get(/databases/$(database)/documents/events/$(id)).data.get('endAt',4102444800000) <= request.time.toMillis()
-          && request.time.toMillis() < get(/databases/$(database)/documents/events/$(id)).data.endAt + 604800000
-          && !get(/databases/$(database)/documents/events/$(id)).data.get('cancelled',false)
-          && exists(/databases/$(database)/documents/events/$(id)/attendees/$(uid));
+          && getAfter(/databases/$(database)/documents/eventFeedback/$(request.resource.data.feedbackId)).data.uid == uid;
         allow update, delete: if false;
+      }
+      match /feedbackEligibility/{uid} {
+        allow read: if participant() && (request.auth.uid == uid || noticeSender());
+        allow create, update: if noticeSender()
+          && request.resource.data.keys().hasOnly(['admitted','revision','endAt'])
+          && request.resource.data.admitted == true && request.resource.data.revision is int && request.resource.data.endAt is int;
+        allow delete: if false;
+      }
+      match /feedbackEligibilityState/{key} {
+        allow read, create, update: if noticeSender() && key == 'current';
+        allow delete: if false;
       }
       match /attendanceState/{stateId} {
         allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
