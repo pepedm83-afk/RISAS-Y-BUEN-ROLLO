@@ -66,6 +66,7 @@ function encodeValue_(v) {
   if (v instanceof Date) return {timestampValue: v.toISOString()};
   if (Array.isArray(v)) return {arrayValue: {values: v.map(encodeValue_)}};
   if (typeof v === 'boolean') return {booleanValue: v};
+  if (typeof v === 'number') return Number.isInteger(v) ? {integerValue: String(v)} : {doubleValue: v};
   return {stringValue: String(v)};
 }
 function updateQueue_(id, values, token) {
@@ -167,7 +168,9 @@ function procesarAvisos() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
-    const token = firebaseToken_(), pending = pendingRequests_(token);
+    const token = firebaseToken_();
+    try { prepararValoraciones_(token); } catch (error) { console.warn('No se pudieron preparar las valoraciones: ' + error.message); }
+    const pending = pendingRequests_(token);
     if (!pending.length) return;
     const grants = listDocuments_('grants', token);
     for (const queue of pending) processRequest_(queue, grants, token);
@@ -196,4 +199,60 @@ function probarEnvio() {
   senderGuard_();
   MailApp.sendEmail({to: NOTICE_SENDER, subject: 'Prueba de avisos · Risas y Buen Rollo', body: 'Esta es una prueba del servicio de avisos. El envío se realiza desde el correo dedicado de la comunidad. No se ha enviado esta prueba a ningún administrador ni usuario.', name: 'Risas y Buen Rollo', replyTo: NOTICE_SENDER});
   console.log('Correo de prueba enviado exclusivamente al buzón de avisos.');
+}
+
+// Derive feedback permissions using the exact same ordered allocation as the agenda.
+// Replay an append-only, transaction-ordered history. Existing places are never taken by a later change.
+function allocateFeedbackSeats_(rows,changes,currentCapacity=0){
+ const ops=[...changes].sort((a,b)=>a.seq-b.seq),initial=new Map(),seen=new Set();
+ for(const op of ops)if(op.kind!=='capacity'&&!seen.has(op.uid)){seen.add(op.uid);if(op.legacyPeople>0)initial.set(op.uid,op.legacyPeople);}
+ for(const row of rows)if(!row.joinedOrder&&!seen.has(row.uid))initial.set(row.uid,1+row.companions);
+ let capacity=ops[0]?.limitBefore??currentCapacity,admission=0;const parties=new Map();
+ for(const [uid,people] of [...initial].sort(([a],[b])=>a.localeCompare(b)))parties.set(uid,{uid,requested:people,confirmed:people,admitted:++admission,waitOrder:0,joinedOrder:0,legacy:true});
+ function promote(){let available=capacity?Math.max(0,capacity-[...parties.values()].reduce((n,p)=>n+p.confirmed,0)):Infinity;
+  const queue=[...parties.values()].filter(p=>p.requested>p.confirmed).sort((a,b)=>a.waitOrder-b.waitOrder||a.uid.localeCompare(b.uid));
+  for(const p of queue){const needed=p.requested-p.confirmed;if(needed<=available){if(!p.confirmed)p.admitted=++admission;p.confirmed=p.requested;p.waitOrder=0;available-=needed;}}
+ }
+ for(const op of ops){
+  if(op.kind==='capacity')capacity=op.limitAfter;
+  else if(op.kind==='leave')parties.delete(op.uid);
+  else if(op.kind==='join')parties.set(op.uid,{uid:op.uid,requested:op.people,confirmed:0,admitted:0,waitOrder:op.seq,joinedOrder:op.seq,legacy:false});
+  else if(op.kind==='change'){
+   const p=parties.get(op.uid);if(!p)throw Error('Falta un movimiento anterior de la lista. Actualiza los eventos.');
+   if(op.people>p.requested)p.waitOrder=op.seq;
+   p.requested=op.people;p.confirmed=Math.min(p.confirmed,op.people);
+   if(p.requested===p.confirmed)p.waitOrder=0;
+  }
+  promote();
+ }
+ const confirmed=[...parties.values()].filter(p=>p.confirmed>0).sort((a,b)=>a.admitted-b.admitted||a.uid.localeCompare(b.uid));
+ const waiting=[...parties.values()].filter(p=>p.requested>p.confirmed).sort((a,b)=>a.waitOrder-b.waitOrder||a.uid.localeCompare(b.uid));
+ return {parties,confirmed,waiting,capacity,used:confirmed.reduce((n,p)=>n+p.confirmed,0),waitingPeople:waiting.reduce((n,p)=>n+p.requested-p.confirmed,0),hasLegacy:confirmed.some(p=>p.legacy)};
+}
+
+function prepararValoraciones() { senderGuard_(); prepararValoraciones_(firebaseToken_()); }
+function prepararValoraciones_(token) {
+  const now = Date.now();
+  const result = firestore_(':runQuery', token, {method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{
+    from:[{collectionId:'events'}],where:{compositeFilter:{op:'AND',filters:[
+      {fieldFilter:{field:{fieldPath:'endAt'},op:'GREATER_THAN',value:{integerValue:String(now-604800000)}}},
+      {fieldFilter:{field:{fieldPath:'endAt'},op:'LESS_THAN_OR_EQUAL',value:{integerValue:String(now)}}}
+    ]}},orderBy:[{field:{fieldPath:'endAt'},direction:'DESCENDING'}],limit:100
+  }})});
+  for (const item of result.filter(r=>r.document)) {
+    const raw=item.document,e=decodeFields_(raw.fields),id=raw.name.split('/').pop();if(e.cancelled)continue;
+    const path='/events/'+encodeURIComponent(id),state=firestore_(path+'/attendanceState/current',token),revision=state?decodeFields_(state.fields).revision:0;
+    const previous=firestore_(path+'/feedbackEligibilityState/current',token),data=previous&&decodeFields_(previous.fields);
+    if(data&&data.revision===revision&&data.endAt===e.endAt)continue;
+    const rows=listDocuments_('events/'+encodeURIComponent(id)+'/attendees',token).map(r=>Object.assign({uid:r.id},r));
+    const ops=listDocuments_('events/'+encodeURIComponent(id)+'/attendanceChanges',token);
+    const latest=firestore_(path+'/attendanceState/current',token),after=latest?decodeFields_(latest.fields).revision:0;
+    if(after!==revision||ops.length!==revision)continue;
+    const seats=allocateFeedbackSeats_(rows,ops,e.capacity||0).confirmed;
+    const fields=Object.fromEntries(Object.entries({admitted:true,revision:revision,endAt:e.endAt}).map(([k,v])=>[k,encodeValue_(v)]));
+    const writes=seats.map(seat=>({update:{name:raw.name+'/feedbackEligibility/'+seat.uid,fields:fields}}));
+    writes.push({update:{name:raw.name+'/feedbackEligibilityState/current',fields:{revision:encodeValue_(revision),endAt:encodeValue_(e.endAt)}}});
+    // Commit access rows before the marker. At most 1000 confirmed attendees, 400 writes per commit.
+    for(let offset=0;offset<writes.length;offset+=400)firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes:writes.slice(offset,offset+400)})});
+  }
 }
