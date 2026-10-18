@@ -241,12 +241,12 @@ function prepararValoraciones_(token) {
   const now = Date.now();
   const result = firestore_(':runQuery', token, {method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{
     from:[{collectionId:'events'}],where:{compositeFilter:{op:'AND',filters:[
-      {fieldFilter:{field:{fieldPath:'endAt'},op:'GREATER_THAN',value:{integerValue:String(now-604800000)}}},
+      {fieldFilter:{field:{fieldPath:'endAt'},op:'GREATER_THAN',value:{integerValue:String(now-172800000)}}},
       {fieldFilter:{field:{fieldPath:'endAt'},op:'LESS_THAN_OR_EQUAL',value:{integerValue:String(now)}}}
     ]}},orderBy:[{field:{fieldPath:'endAt'},direction:'DESCENDING'}],limit:100
   }})});
   const recent=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'events'}],where:{compositeFilter:{op:'AND',filters:[
-    {fieldFilter:{field:{fieldPath:'start'},op:'GREATER_THAN',value:{stringValue:new Date(now-8*86400000).toISOString()}}},
+    {fieldFilter:{field:{fieldPath:'start'},op:'GREATER_THAN',value:{stringValue:new Date(now-3*86400000).toISOString()}}},
     {fieldFilter:{field:{fieldPath:'start'},op:'LESS_THAN_OR_EQUAL',value:{stringValue:new Date(now).toISOString()}}}
   ]}},orderBy:[{field:{fieldPath:'start'},direction:'DESCENDING'}],limit:200}})});
   const unique=new Map([...result,...recent].filter(r=>r.document).map(r=>[r.document.name,r]));
@@ -254,12 +254,12 @@ function prepararValoraciones_(token) {
     const raw=item.document,e=decodeFields_(raw.fields),id=raw.name.split('/').pop();if(e.cancelled)continue;
     const path='/events/'+encodeURIComponent(id);
     if(!e.endAt){
-      const end=finalSinHora_(e.start);if(!Number.isFinite(end)||end>now||end<=now-604800000)continue;
+      const end=finalSinHora_(e.start);if(!Number.isFinite(end)||end>now||end<=now-172800000)continue;
       // Fill only the missing end time; abort if somebody edited the event meanwhile.
       const precondition=raw.updateTime?'&currentDocument.updateTime='+encodeURIComponent(raw.updateTime):'';
       firestore_(path+'?updateMask.fieldPaths=endAt'+precondition,token,{method:'patch',contentType:'application/json',payload:JSON.stringify({fields:{endAt:encodeValue_(end)}})});e.endAt=end;
     }
-    if(e.endAt>now||e.endAt<=now-604800000)continue;
+    if(e.endAt>now||e.endAt<=now-172800000)continue;
     const state=firestore_(path+'/attendanceState/current',token),revision=state?decodeFields_(state.fields).revision:0;
     const previous=firestore_(path+'/feedbackEligibilityState/current',token),data=previous&&decodeFields_(previous.fields);
     if(data&&data.revision===revision&&data.endAt===e.endAt)continue;
