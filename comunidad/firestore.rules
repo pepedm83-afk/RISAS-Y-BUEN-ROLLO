@@ -45,7 +45,7 @@ service cloud.firestore {
         && request.resource.data.comment is string && request.resource.data.comment.size() <= 1500
         && request.resource.data.createdAt == request.time
         && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('endAt',4102444800000) <= request.time.toMillis()
-        && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 604800000
+        && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 172800000
         && !get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('cancelled',false)
         && feedbackSeat(request.resource.data.eventId,request.auth.uid)
         && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid)).data.feedbackId == feedbackId;
