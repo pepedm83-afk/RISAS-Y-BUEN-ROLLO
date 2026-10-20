@@ -9,6 +9,7 @@ service cloud.firestore {
       return verified() && (owner() || noticeSender() || (
         exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
         && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('phone','') != ''
+        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('name','') != ''
         && ((exists(/databases/$(database)/documents/membershipReviews/$(request.auth.uid))
           && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.active == true
           && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.phone == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.phone)
@@ -61,6 +62,17 @@ service cloud.firestore {
       allow create, update: if owner() && request.auth.uid != uid && request.resource.data.keys().hasOnly(['blocked']) && request.resource.data.blocked is bool;
       allow delete: if false;
     }
+    // Private registration data survive email verification on another device.
+    // This draft never grants community access or reserves an unverified name.
+    match /registrationDrafts/{uid} {
+      allow read, delete: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && (!exists(/databases/$(database)/documents/members/$(uid)) || get(/databases/$(database)/documents/members/$(uid)).data.get('blocked',false) == false)
+        && request.resource.data.keys().hasOnly(['name','phone','phoneCountry'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && request.resource.data.phone is string && request.resource.data.phone.matches('[+][1-9][0-9]{7,14}')
+        && request.resource.data.phoneCountry is string && request.resource.data.phoneCountry.matches('[+][1-9][0-9]{0,2}');
+    }
     match /profiles/{uid} {
       allow read: if verified() && (request.auth.uid == uid || communityAdmin());
       allow create, update: if verified() && request.auth.uid == uid && request.resource.data.keys().hasOnly(['name','nameKey','lastSeen','phone','phoneCountry']) && (!('phone' in request.resource.data) || (request.resource.data.phone is string && request.resource.data.phone.matches('[+][1-9][0-9]{7,14}') && request.resource.data.phoneCountry is string && request.resource.data.phoneCountry.matches('[+][1-9][0-9]{0,2}'))) && (!('lastSeen' in request.resource.data) || request.resource.data.lastSeen == request.time || (exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.lastSeen == resource.data.get('lastSeen',null))) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((exists(/databases/$(database)/documents/profiles/$(uid)) && request.resource.data.name == resource.data.name && request.resource.data.get('nameKey','') == resource.data.get('nameKey','')) || (request.resource.data.nameKey is string && request.resource.data.nameKey.size() > 0 && getAfter(/databases/$(database)/documents/nameClaims/$(request.resource.data.nameKey)).data.uid == uid));
@@ -104,7 +116,7 @@ service cloud.firestore {
       allow delete: if verified() && resource.data.uid == request.auth.uid && getAfter(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('nameKey','') != key;
     }
     match /settings/{id} {
-      allow read: if id == 'community';
+      allow read: if id == 'community' && participant();
       allow create, update: if id == 'community' && communityAdmin()
         && request.resource.data.keys().hasOnly(['announcementGroupURL'])
         && request.resource.data.announcementGroupURL is string
@@ -112,7 +124,7 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /groups/{id} {
-      allow read: if true;
+      allow read: if participant();
       allow create, update: if communityAdmin() && request.resource.data.keys().hasOnly(['name','whatsapp']) && request.resource.data.name is string && request.resource.data.whatsapp is string && (request.resource.data.whatsapp == '' || request.resource.data.whatsapp.matches('https://chat[.]whatsapp[.]com/.*'));
     }
     match /grants/{uid} {
@@ -186,11 +198,11 @@ service cloud.firestore {
     }
     match /requests/{uid} {
       allow read: if verified() && (request.auth.uid == uid || owner());
-      allow create, update: if verified() && request.auth.uid == uid && emailVerified() && request.resource.data.keys().hasOnly(['name','group','groups']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((request.resource.data.get('groups',[]) is list && request.resource.data.get('groups',[]).size() > 0 && request.resource.data.groups.size() <= 30 && request.resource.data.groups.toSet().size() == request.resource.data.groups.size()) || (request.resource.data.get('group','') is string && exists(/databases/$(database)/documents/groups/$(request.resource.data.group))));
+      allow create, update: if verified() && request.auth.uid == uid && emailVerified() && request.resource.data.keys().hasOnly(['name','group','groups']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && ((request.resource.data.get('groups',[]) is list && request.resource.data.get('groups',[]).size() >= 0 && request.resource.data.groups.size() <= 30 && request.resource.data.groups.toSet().size() == request.resource.data.groups.size()) || (request.resource.data.get('group','') is string && exists(/databases/$(database)/documents/groups/$(request.resource.data.group))));
       allow delete: if owner() || (verified() && request.auth.uid == uid);
     }
     match /events/{id} {
-      allow read: if true;
+      allow read: if participant();
       function https(value) { return value is string && (value == '' || value.matches('https://.*')); }
       function validMealOption(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
       function validEvent() {
@@ -366,5 +378,3 @@ allow create, update: if validAttendanceOrder(uid) && unpaid() && participant() 
     }
   }
 }
-
-
