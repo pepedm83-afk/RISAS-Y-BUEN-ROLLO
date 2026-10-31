@@ -15,7 +15,7 @@ export function createPushControls(app,db,context){
   let config=null,supported=false,registration=null,messaging=null,currentRecord=null;
   const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const selection=()=>[...$('pushGroupChoices').querySelectorAll('input:checked')].map(i=>i.value);
-  const toggle=enabled=>{$('pushToggle').textContent=enabled?'🔔 Desactivar notificaciones':'🔔 Activar notificaciones';$('pushToggle').dataset.enabled=String(enabled);$('notificationSettings').hidden=!enabled;};
+  const toggle=enabled=>{$('pushToggle').dataset.enabled=String(enabled);$('pushIndicator').hidden=!enabled;$('pushToggle').setAttribute('aria-label',enabled?'Avisos: activados en este dispositivo':'Avisos: desactivados en este dispositivo');$('pushToggle').title=enabled?'Avisos activados. Pulsa para configurar o desactivar.':'Pulsa para activar o configurar los avisos.';};
   const status=text=>{$('pushStatus').textContent=text;};
   const readRecord=()=>{try{return JSON.parse(localStorage.getItem(recordKey)||'null');}catch{return null;}};
   const remember=record=>{localStorage.setItem(recordKey,JSON.stringify(record));currentRecord=record;};
