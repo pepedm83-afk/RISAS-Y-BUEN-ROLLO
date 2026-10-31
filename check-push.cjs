@@ -46,7 +46,8 @@ async function push(data){let done;listeners.push({data:{json:()=>({data})},wait
  await push({type:'new-event',uid:'u',eventId:'e1',title:'Ruta',body:'Rutas'});assert.equal(notifications.length,1);
  await push({type:'new-event',uid:'u',eventId:'e1',title:'Ruta',body:'Rutas'});assert.equal(notifications.length,1);
  await push({type:'new-event',uid:'u',eventId:'../evil',title:'Bad'});assert.equal(notifications.length,1);
- storage.set('account',{uid:'u',enabled:false});await push({type:'new-event',uid:'u',eventId:'e2'});assert.equal(notifications.length,1);
+ await push({type:'seat-confirmed',uid:'u',eventId:'e1',notificationId:'e1-51-u',title:'Ya tienes plaza'});assert.equal(notifications.length,2);await push({type:'seat-confirmed',uid:'u',eventId:'e1',notificationId:'e1-51-u'});assert.equal(notifications.length,2);await push({type:'seat-confirmed',uid:'other',eventId:'e1',notificationId:'e1-52-u'});assert.equal(notifications.length,2);
+ storage.set('account',{uid:'u',enabled:false});await push({type:'new-event',uid:'u',eventId:'e2'});assert.equal(notifications.length,2);
  let done;listeners.notificationclick({notification:{close:()=>{},data:notifications[0].o.data},waitUntil:p=>done=p});await done;assert.equal(opened[0],'https://example.com/comunidad/?event=e1');
  const rules=fs.readFileSync(root+'firestore.rules','utf8');assert(rules.includes("request.resource.data.uid == request.auth.uid"));assert(rules.includes("request.resource.data.pushStatus == 'pending'"));
  const mail=fs.readFileSync(root+'avisos/Code.gs','utf8');assert(!mail.includes("listDocuments_('emailSubscriptions'"));assert(!mail.includes('for (const subscription'));
