@@ -208,13 +208,14 @@ function allocateFeedbackSeats_(rows,changes,currentCapacity=0){
  const ops=[...changes].sort((a,b)=>a.seq-b.seq),initial=new Map(),seen=new Set();
  for(const op of ops)if(op.kind!=='capacity'&&!seen.has(op.uid)){seen.add(op.uid);if(op.legacyPeople>0)initial.set(op.uid,op.legacyPeople);}
  for(const row of rows)if(!row.joinedOrder&&!seen.has(row.uid))initial.set(row.uid,1+row.companions);
- let capacity=ops[0]?.limitBefore??currentCapacity,admission=0;const parties=new Map();
+ let capacity=ops[0]?.limitBefore??currentCapacity,admission=0,movement=null;const parties=new Map();
  for(const [uid,people] of [...initial].sort(([a],[b])=>a.localeCompare(b)))parties.set(uid,{uid,requested:people,confirmed:people,admitted:++admission,waitOrder:0,joinedOrder:0,legacy:true});
  function promote(){let available=capacity?Math.max(0,capacity-[...parties.values()].reduce((n,p)=>n+p.confirmed,0)):Infinity;
   const queue=[...parties.values()].filter(p=>p.requested>p.confirmed).sort((a,b)=>a.waitOrder-b.waitOrder||a.uid.localeCompare(b.uid));
-  for(const p of queue){const needed=p.requested-p.confirmed;if(needed<=available){if(!p.confirmed)p.admitted=++admission;p.confirmed=p.requested;p.waitOrder=0;available-=needed;}}
+  for(const p of queue){const needed=p.requested-p.confirmed;if(needed<=available){if(!p.confirmed)p.admitted=++admission;p.admittedAt=(typeof movement?.createdAt?.toMillis==='function'?movement.createdAt.toMillis():Date.parse(movement?.createdAt))||0;p.admissionRevision=movement?.seq||0;if(p.waitOrder<(movement?.seq||0)){p.promotionRevision=movement.seq;p.promotionAdded=needed;}p.confirmed=p.requested;p.waitOrder=0;available-=needed;}}
  }
  for(const op of ops){
+  movement=op;
   if(op.kind==='capacity')capacity=op.limitAfter;
   else if(op.kind==='leave')parties.delete(op.uid);
   else if(op.kind==='join')parties.set(op.uid,{uid:op.uid,requested:op.people,confirmed:0,admitted:0,waitOrder:op.seq,joinedOrder:op.seq,legacy:false});
@@ -296,6 +297,7 @@ function procesarResumenesAsistencia_(token) {
     const writes=[{verify:raw.name,currentDocument:{updateTime:raw.updateTime}}];
     writes.push(state?{verify:state.name,currentDocument:{updateTime:state.updateTime}}:{verify:raw.name+'/attendanceState/current',currentDocument:{exists:false}});
     writes.push({update:{name:root+'/attendanceSummaries/'+id,fields},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}]});
+    if(typeof appendSeatNotifications_==='function')appendSeatNotifications_(writes,raw,e,rows,result,revision,token);
     writes.push({delete:queue.name,currentDocument:{updateTime:queue.updateTime}});
     try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes})});}catch(error){console.warn('Recuento pendiente de reintento: '+id);}
   }
