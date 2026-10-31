@@ -169,6 +169,7 @@ function procesarAvisos() {
   if (!lock.tryLock(1000)) return;
   try {
     const token = firebaseToken_();
+    try { procesarResumenesAsistencia_(token); } catch (error) { console.warn('Recuentos pendientes: ' + error.message); }
     try { prepararValoraciones_(token); } catch (error) { console.warn('No se pudieron preparar las valoraciones: ' + error.message); }
     const pending = pendingRequests_(token);
     if (!pending.length) return;
@@ -261,7 +262,9 @@ function prepararValoraciones_(token) {
     }
     if(e.endAt>now||e.endAt<=now-172800000)continue;
     const state=firestore_(path+'/attendanceState/current',token),revision=state?decodeFields_(state.fields).revision:0;
-    const previous=firestore_(path+'/feedbackEligibilityState/current',token),data=previous&&decodeFields_(previous.fields);
+    const markerKey='feedback-marker:'+id,markerCache=CacheService.getScriptCache();
+    let data=null;try{data=JSON.parse(markerCache.get(markerKey)||'null');}catch(_){}
+    if(!data||data.revision!==revision||data.endAt!==e.endAt){const previous=firestore_(path+'/feedbackEligibilityState/current',token);data=previous&&decodeFields_(previous.fields);if(data)markerCache.put(markerKey,JSON.stringify(data),1800);}
     if(data&&data.revision===revision&&data.endAt===e.endAt)continue;
     const rows=listDocuments_('events/'+encodeURIComponent(id)+'/attendees',token).map(r=>Object.assign({uid:r.id},r));
     const ops=listDocuments_('events/'+encodeURIComponent(id)+'/attendanceChanges',token);
@@ -273,5 +276,38 @@ function prepararValoraciones_(token) {
     writes.push({update:{name:raw.name+'/feedbackEligibilityState/current',fields:{revision:encodeValue_(revision),endAt:encodeValue_(e.endAt)}}});
     // Commit access rows before the marker. At most 1000 confirmed attendees, 400 writes per commit.
     for(let offset=0;offset<writes.length;offset+=400)firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes:writes.slice(offset,offset+400)})});
+    markerCache.put(markerKey,JSON.stringify({revision:revision,endAt:e.endAt}),1800);
   }
+}
+
+// Only queued revisions are counted. Idle events do not load any attendee documents.
+function procesarResumenesAsistencia_(token) {
+  const pending=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'attendanceSummaryQueue'}],limit:100}})});
+  for(const item of pending){
+    const queue=item.document;if(!queue)continue;const id=queue.name.split('/').pop(),path='/events/'+encodeURIComponent(id);
+    const raw=firestore_(path,token);if(!raw)continue;
+    const e=decodeFields_(raw.fields),state=firestore_(path+'/attendanceState/current',token),revision=state?decodeFields_(state.fields).revision:0;
+    const rows=listDocuments_('events/'+encodeURIComponent(id)+'/attendees',token).map(r=>Object.assign({uid:r.id},r));
+    const ops=listDocuments_('events/'+encodeURIComponent(id)+'/attendanceChanges',token);
+    if(ops.length!==revision)continue;
+    const result=allocateFeedbackSeats_(rows,ops,e.capacity||0),root=raw.name.slice(0,raw.name.indexOf('/events/'));
+    const summary={confirmed:result.used,waiting:result.waitingPeople,capacity:e.capacity||0,revision};
+    const fields=Object.fromEntries(Object.entries(summary).map(([key,value])=>[key,encodeValue_(value)]));
+    const writes=[{verify:raw.name,currentDocument:{updateTime:raw.updateTime}}];
+    writes.push(state?{verify:state.name,currentDocument:{updateTime:state.updateTime}}:{verify:raw.name+'/attendanceState/current',currentDocument:{exists:false}});
+    writes.push({update:{name:root+'/attendanceSummaries/'+id,fields},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}]});
+    writes.push({delete:queue.name,currentDocument:{updateTime:queue.updateTime}});
+    try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes})});}catch(error){console.warn('Recuento pendiente de reintento: '+id);}
+  }
+}
+// One-time bootstrap for existing events and inscriptions. No new timer is installed.
+function inicializarResumenesAsistencia() {
+  senderGuard_();const token=firebaseToken_(),now=new Date().toISOString();
+  const result=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'events'}],where:{fieldFilter:{field:{fieldPath:'start'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:now}}}}})});
+  for(const item of result){if(!item.document)continue;const raw=item.document,id=raw.name.split('/').pop(),root=raw.name.slice(0,raw.name.indexOf('/events/'));
+    // Queue through the sender-only migration rule, preserving any newer pending revision.
+    const existing=firestore_('/attendanceSummaryQueue/'+encodeURIComponent(id),token);if(existing)continue;
+    try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes:[{update:{name:root+'/attendanceSummaryQueue/'+id,fields:{revision:encodeValue_(0)}},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}],currentDocument:{exists:false}}]})});}catch(error){console.warn('La cola ya se actualizó: '+id);}
+  }
+  procesarResumenesAsistencia_(token);
 }
