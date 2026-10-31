@@ -15,6 +15,7 @@ export function createPushControls(app,db,context){
   let config=null,supported=false,registration=null,messaging=null,currentRecord=null;
   const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
   const selection=()=>[...$('pushGroupChoices').querySelectorAll('input:checked')].map(i=>i.value);
+  const toggle=enabled=>{$('pushToggle').textContent=enabled?'🔔 Desactivar notificaciones':'🔔 Activar notificaciones';$('pushToggle').dataset.enabled=String(enabled);$('notificationSettings').hidden=!enabled;};
   const status=text=>{$('pushStatus').textContent=text;};
   const readRecord=()=>{try{return JSON.parse(localStorage.getItem(recordKey)||'null');}catch{return null;}};
   const remember=record=>{localStorage.setItem(recordKey,JSON.stringify(record));currentRecord=record;};
@@ -49,7 +50,7 @@ export function createPushControls(app,db,context){
       if(record&&record.uid===user.uid){preferences=(await getDoc(doc(db,'pushDevices',record.id))).data()||null;currentRecord=record;}
       // On shared devices, messages for a previous account must never display.
       if(record&&supported)await setWorkerState(user.uid,!!preferences?.enabled&&Notification.permission==='granted');
-    }catch{status('No se han podido cargar los avisos. Vuelve a abrir Mi cuenta para intentarlo de nuevo.');}
+    }catch{status('No se han podido cargar los avisos. Abre los avisos de la parte superior para intentarlo de nuevo.');}
     if(context.getUser()?.uid!==user.uid)return;
     $('pushGroupChoices').replaceChildren(...context.getGroups().map(group=>{
       const label=document.createElement('label');label.className='email-choice';
@@ -57,6 +58,7 @@ export function createPushControls(app,db,context){
       input.checked=preferences?(preferences.groups||[]).includes(group.id):assigned.includes(group.id);
       label.append(input,document.createTextNode(group.name));return label;
     }));
+    toggle(!!preferences?.enabled&&supported&&Notification.permission==='granted');
     const ready=config?.enabled===true&&/^[A-Za-z0-9_-]{87}$/.test(config.vapidKey||'');
     $('enablePush').disabled=!ready||help.blocked||!supported;
     $('enablePush').textContent=preferences?.enabled?'Guardar grupos de este dispositivo':'Activar avisos en este dispositivo';
@@ -65,7 +67,7 @@ export function createPushControls(app,db,context){
     else if(help.blocked)status(help.text);
     else if(!supported)status('Este navegador no permite estos avisos. Prueba con Safari en la app instalada en iPhone, o Chrome en Android.');
     else if(Notification.permission==='denied')status('Las notificaciones están bloqueadas. Permítelas en los ajustes del navegador o del teléfono y vuelve aquí.');
-    else status(preferences?.enabled?'Avisos activados en este dispositivo para los grupos seleccionados.':'Elige tus grupos y pulsa Activar avisos. Solo recibirás nuevas quedadas, no las anteriores.');
+    else status(preferences?.enabled?'Avisos activados en este dispositivo para los grupos seleccionados.':'Elige tus grupos y pulsa Activar avisos. Recibirás nuevas quedadas de esos grupos y avisos cuando tus reservas consigan plaza.');
   }
   async function activate(){
     const user=context.getUser(),groups=selection();
@@ -79,14 +81,14 @@ export function createPushControls(app,db,context){
     const reg=await worker();messaging=messaging||getMessaging(app);
     const token=await getToken(messaging,{vapidKey:config.vapidKey,serviceWorkerRegistration:reg});
     if(!token)throw Error('No se ha podido registrar este dispositivo. Inténtalo de nuevo.');
-    if(context.getUser()?.uid!==user.uid)throw Error('Tu cuenta ha cambiado. Vuelve a abrir Mi cuenta.');
+    if(context.getUser()?.uid!==user.uid)throw Error('Tu cuenta ha cambiado. Abre los avisos de la parte superior.');
     const bytes=new TextEncoder().encode(token),digest=await crypto.subtle.digest('SHA-256',bytes);
     const id=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
     const ref=doc(db,'pushDevices',id),previous=(await getDoc(ref)).data();
     const same=previous?.uid===user.uid&&previous.enabled===true&&JSON.stringify(previous.groups)===JSON.stringify(groups);
     await setDoc(ref,{uid:user.uid,token,enabled:true,groups,subscribedAt:same?previous.subscribedAt:serverTimestamp(),updatedAt:serverTimestamp()});
     remember({uid:user.uid,id});await setWorkerState(user.uid,true);
-    $('disablePush').hidden=false;$('enablePush').textContent='Guardar grupos de este dispositivo';
+    toggle(true);$('disablePush').hidden=false;$('enablePush').textContent='Guardar grupos de este dispositivo';
     status('Avisos activados en este dispositivo. Al tocar una notificación se abrirá la quedada.');
   }
   async function deactivate(){
@@ -96,7 +98,7 @@ export function createPushControls(app,db,context){
     if(record?.uid===user?.uid)await deleteDoc(doc(db,'pushDevices',record.id));
     if(supported){messaging=messaging||getMessaging(app);await deleteToken(messaging);}
     localStorage.removeItem(recordKey);currentRecord=null;
-    $('disablePush').hidden=true;$('enablePush').textContent='Activar avisos en este dispositivo';
+    toggle(false);$('disablePush').hidden=true;$('enablePush').textContent='Activar avisos en este dispositivo';
     status('Avisos desactivados en este dispositivo.');
   }
   async function beforeLogout(){if(currentRecord||readRecord())await deactivate();}

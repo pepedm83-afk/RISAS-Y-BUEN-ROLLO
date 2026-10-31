@@ -17,15 +17,15 @@ self.addEventListener('message',event=>{
 function safeEventURL(eventId){if(!/^[A-Za-z0-9_-]{1,128}$/.test(eventId||''))return null;const url=new URL(ROOT);url.searchParams.set('event',eventId);return url.href;}
 self.addEventListener('push',event=>event.waitUntil((async()=>{
   let data;try{data=event.data.json().data;}catch{return;}
-  if(!data||data.type!=='new-event')return;
+  if(!data||!['new-event','seat-confirmed'].includes(data.type))return;if(data.type==='seat-confirmed'&&!/^[A-Za-z0-9_-]{1,300}$/.test(data.notificationId||''))return;
   const account=await stateStore('readonly',store=>store.get('account'));
   if(!account?.enabled||account.uid!==data.uid)return;
   const url=safeEventURL(data.eventId);if(!url)return;
-  const key=data.uid+'|'+data.eventId,receipts=await stateStore('readonly',store=>store.get('receipts'))||[];
+  const key=data.type==='seat-confirmed'?data.uid+'|seat|'+data.notificationId:data.uid+'|'+data.eventId,receipts=await stateStore('readonly',store=>store.get('receipts'))||[];
   if(receipts.includes(key))return;
   await self.registration.showNotification(String(data.title||'Nueva quedada').slice(0,180),{
     body:String(data.body||'Hay una nueva quedada en uno de tus grupos.').slice(0,240),
-    icon:new URL('icon-gold-192.png',ROOT).href,tag:'quedada-'+data.eventId,data:{url},renotify:false
+    icon:new URL('icon-gold-192.png',ROOT).href,tag:data.type==='seat-confirmed'?'plaza-'+data.notificationId:'quedada-'+data.eventId,data:{url},renotify:false
   });
   await stateStore('readwrite',store=>store.put([...receipts,key].slice(-500),'receipts'));
 })()));
