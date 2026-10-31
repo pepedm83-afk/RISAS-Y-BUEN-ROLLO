@@ -1,0 +1,8 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ctx={console,Date,Map,Object,encodeURIComponent};vm.createContext(ctx);vm.runInContext(fs.readFileSync('comunidad/avisos/Code.gs','utf8'),ctx);
+const root='projects/demo/databases/(default)/documents',event=root+'/events/e';let writes,reads=[];
+ctx.listDocuments_=(path)=>{reads.push(path);if(path.endsWith('/attendees'))return [];return [{seq:1,uid:'a',kind:'join',people:2,limitBefore:3,legacyPeople:0},{seq:2,uid:'b',kind:'join',people:3,limitBefore:3,legacyPeople:0},{seq:3,uid:'c',kind:'join',people:1,limitBefore:3,legacyPeople:0}];};
+ctx.firestore_=function(path,token,opt){if(path===':runQuery')return [{document:{name:root+'/attendanceSummaryQueue/e',updateTime:'queue-time'}}];if(path==='/events/e')return {name:event,updateTime:'event-time',fields:{capacity:{integerValue:'3'}}};if(path.endsWith('/attendanceState/current'))return {name:event+'/attendanceState/current',updateTime:'state-time',fields:{revision:{integerValue:'3'}}};if(path===':commit'){writes=JSON.parse(opt.payload).writes;return {};}throw Error(path);};
+ctx.procesarResumenesAsistencia_('token');const summary=writes.find(w=>w.update)?.update.fields;assert.equal(summary.confirmed.integerValue,'3');assert.equal(summary.waiting.integerValue,'3');assert.equal(writes.filter(w=>w.verify).length,2);assert.equal(writes.at(-1).currentDocument.updateTime,'queue-time');assert.equal(reads.length,2);
+reads=[];writes=null;ctx.firestore_=()=>[];ctx.procesarResumenesAsistencia_('token');assert.equal(reads.length,0);assert.equal(writes,null);
+console.log('OK: resumen respeta plazas y espera; confirma revisión, evento y cola antes de escribir; sin tareas no lee asistentes.');
