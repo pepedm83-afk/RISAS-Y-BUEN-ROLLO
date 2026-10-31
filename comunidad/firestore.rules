@@ -5,15 +5,17 @@ service cloud.firestore {
     function signedVerified() { return signedIn() && request.auth.token.email_verified == true; }
     function emailVerified() { return request.auth != null && request.auth.token.email_verified == true; }
     function verified() { return signedVerified() && (!exists(/databases/$(database)/documents/members/$(request.auth.uid)) || get(/databases/$(database)/documents/members/$(request.auth.uid)).data.get('blocked',false) == false); }
+    function approvedProfile() {
+      let profilePath = /databases/$(database)/documents/profiles/$(request.auth.uid);
+      let reviewPath = /databases/$(database)/documents/membershipReviews/$(request.auth.uid);
+      let profile = exists(profilePath) ? get(profilePath).data : {'name':'','phone':''};
+      let review = exists(reviewPath) ? get(reviewPath).data : {'active':false,'phone':''};
+      return profile.get('name','') != '' && profile.get('phone','') != ''
+        && (exists(/databases/$(database)/documents/grants/$(request.auth.uid))
+          || (review.get('active',false) == true && review.get('phone','') == profile.phone));
+    }
     function participant() {
-      return verified() && (owner() || noticeSender() || (
-        exists(/databases/$(database)/documents/profiles/$(request.auth.uid))
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('phone','') != ''
-        && get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.get('name','') != ''
-        && ((exists(/databases/$(database)/documents/membershipReviews/$(request.auth.uid))
-          && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.active == true
-          && get(/databases/$(database)/documents/membershipReviews/$(request.auth.uid)).data.phone == get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.phone)
-          || exists(/databases/$(database)/documents/grants/$(request.auth.uid)))));
+      return verified() && (request.auth.token.email in ['pepedm83@gmail.com','peperisasybuenrollo@gmail.com'] || approvedProfile());
     }
     match /membershipReviews/{uid} {
       allow read: if verified() && (request.auth.uid == uid || communityAdmin());
@@ -123,9 +125,67 @@ service cloud.firestore {
         && request.resource.data.announcementGroupURL.matches('https://chat[.]whatsapp[.]com/.*');
       allow delete: if false;
     }
+    function validDish(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
+    function validMenu(menu) {
+      return menu is list && menu.size() <= 12 && menu.toSet().size() == menu.size()
+        && validDish(menu,0) && validDish(menu,1) && validDish(menu,2) && validDish(menu,3)
+        && validDish(menu,4) && validDish(menu,5) && validDish(menu,6) && validDish(menu,7)
+        && validDish(menu,8) && validDish(menu,9) && validDish(menu,10) && validDish(menu,11);
+    }
+    match /attendanceSummaryQueue/{eventId} {
+      allow read, delete: if noticeSender();
+      allow create, update: if noticeSender()
+        && request.resource.data.keys().hasOnly(['revision','updatedAt'])
+        && request.resource.data.revision is int && request.resource.data.revision >= 0
+        && request.resource.data.updatedAt == request.time;
+      allow create, update: if participant()
+        && request.resource.data.keys().hasOnly(['revision','updatedAt'])
+        && request.resource.data.revision is int && request.resource.data.revision >= 0
+        && request.resource.data.updatedAt == request.time
+        && (request.resource.data.revision == 0
+          ? (!exists(/databases/$(database)/documents/events/$(eventId))
+            && getAfter(/databases/$(database)/documents/events/$(eventId)).data.createdBy == request.auth.uid)
+          : (getAfter(/databases/$(database)/documents/events/$(eventId)/attendanceState/current).data.revision == request.resource.data.revision
+            && getAfter(/databases/$(database)/documents/events/$(eventId)/attendanceState/current).data.updatedAt == request.time));
+    }
+    match /attendanceSummaries/{eventId} {
+      allow read: if participant();
+      allow create, update: if noticeSender()
+        && request.resource.data.keys().hasOnly(['confirmed','waiting','capacity','revision','updatedAt'])
+        && request.resource.data.confirmed is int && request.resource.data.confirmed >= 0
+        && request.resource.data.waiting is int && request.resource.data.waiting >= 0
+        && request.resource.data.capacity is int && request.resource.data.capacity >= 0
+        && request.resource.data.revision is int && request.resource.data.revision >= 0
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
     match /groups/{id} {
       allow read: if participant();
       allow create, update: if communityAdmin() && request.resource.data.keys().hasOnly(['name','whatsapp']) && request.resource.data.name is string && request.resource.data.whatsapp is string && (request.resource.data.whatsapp == '' || request.resource.data.whatsapp.matches('https://chat[.]whatsapp[.]com/.*'));
+      match /eventTemplates/{templateId} {
+        allow read: if admin(id);
+        function validTemplate() {
+          let d = request.resource.data;
+          let c = d.config;
+          return d.keys().hasOnly(['name','config','updatedBy','updatedAt'])
+            && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+            && d.updatedBy == request.auth.uid && d.updatedAt == request.time
+            && c.keys().hasOnly(['title','location','locationURL','description','ticket','meal','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','capacity','mealMenu'])
+            && c.title is string && c.title.size() <= 150 && c.location is string && c.location.size() <= 1000
+            && c.description is string && c.description.size() <= 5000
+            && templateURL(c.locationURL) && templateURL(c.ticket) && templateURL(c.restaurantURL)
+            && c.meal is string && c.meal.size() <= 300 && c.mealTime is string
+            && c.bizumInstructions is string && c.bizumInstructions.size() <= 500
+            && c.activityDeposit is number && c.activityDeposit >= 0 && c.activityDeposit <= 10000
+            && c.mealDeposit is number && c.mealDeposit >= 0 && c.mealDeposit <= 10000
+            && c.capacity is int && c.capacity >= 0 && c.capacity <= 1000 && validMenu(c.mealMenu)
+            && (c.meal != '' || (c.mealDeposit == 0 && c.restaurantURL == '' && c.mealTime == '' && c.mealMenu.size() == 0));
+        }
+        function templateURL(value) { return value is string && value.size() <= 2000 && (value == '' || value.matches('https://.*')); }
+        allow create, update: if admin(id) && exists(/databases/$(database)/documents/groups/$(id)) && validTemplate();
+        allow delete: if admin(id);
+      }
+
     }
     match /grants/{uid} {
       allow read: if verified() && (request.auth.uid == uid || communityAdmin() || noticeSender());
@@ -205,38 +265,56 @@ service cloud.firestore {
       allow read: if participant();
       function https(value) { return value is string && (value == '' || value.matches('https://.*')); }
       function validMealOption(menu,i) { return menu.size() <= i || (menu[i] is string && menu[i].size() > 0 && menu[i].size() <= 60); }
-      function validEvent() {
+      function validEvent(isNew) {
         let d = request.resource.data;
+        let changed = isNew ? d.keys().toSet() : d.diff(resource.data).affectedKeys();
         return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity','endAt'])
-          && d.get('endAt',0) is int && d.get('endAt',0) >= 0 && d.get('endAt',0) <= 4102444800000
-          && d.get('cancelled',false) is bool && d.get('capacity',0) is int && d.get('capacity',0) >= 0 && d.get('capacity',0) <= 1000
-          && d.get('mealMenu',[]) is list && d.get('mealMenu',[]).size() <= 6
-          && d.get('mealMenu',[]).toSet().size() == d.get('mealMenu',[]).size()
-          && validMealOption(d.get('mealMenu',[]),0) && validMealOption(d.get('mealMenu',[]),1)
-          && validMealOption(d.get('mealMenu',[]),2) && validMealOption(d.get('mealMenu',[]),3)
-          && validMealOption(d.get('mealMenu',[]),4) && validMealOption(d.get('mealMenu',[]),5)
-          && d.get('mealCloseAt',0) is int && d.get('mealCloseAt',0) >= 0 && d.get('mealCloseAt',0) <= 4102444800000
+          && d.keys().hasAll(['title','category','group','start','location','description','ticket','meal','createdBy'])
+          && (!changed.hasAny(['endAt']) || (d.get('endAt',0) is int && d.get('endAt',0) >= 0 && d.get('endAt',0) <= 4102444800000))
+          && (!changed.hasAny(['cancelled']) || d.get('cancelled',false) is bool)
+          && (!changed.hasAny(['capacity']) || (d.get('capacity',0) is int && d.get('capacity',0) >= 0 && d.get('capacity',0) <= 1000))
+          && (!changed.hasAny(['mealMenu']) || validMenu(d.get('mealMenu',[])))
+          && (!changed.hasAny(['mealCloseAt']) || (d.get('mealCloseAt',0) is int && d.get('mealCloseAt',0) >= 0 && d.get('mealCloseAt',0) <= 4102444800000))
           && (d.get('mealMenu',[]).size() == 0 || d.meal != '')
           && (d.get('mealCloseAt',0) == 0 || d.get('mealMenu',[]).size() > 0)
-          && d.title is string && d.title.size() > 0 && d.title.size() <= 150
-          && d.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance']
-          && d.start is string && d.location is string && d.description is string && d.description.size() <= 5000
-          && https(d.ticket) && https(d.get('locationURL','')) && https(d.get('restaurantURL',''))
-          && d.meal is string && d.meal.size() <= 300 && d.get('mealTime','') is string
-          && d.get('bizumInstructions','') is string && d.get('bizumInstructions','').size() <= 500
-          && d.get('activityDeposit',0) is number && d.get('activityDeposit',0) >= 0 && d.get('activityDeposit',0) <= 10000
-          && d.get('mealDeposit',0) is number && d.get('mealDeposit',0) >= 0 && d.get('mealDeposit',0) <= 10000
+          && (!changed.hasAny(['title']) || (d.title is string && d.title.size() > 0 && d.title.size() <= 150))
+          && (!changed.hasAny(['category']) || d.category in ['route','concert','meetup','palau','bowling','moto','culture','wine','travel','cinema','padel','dance'])
+          && (!changed.hasAny(['start']) || d.start is string)
+          && (!changed.hasAny(['location']) || d.location is string)
+          && (!changed.hasAny(['description']) || (d.description is string && d.description.size() <= 5000))
+          && (!changed.hasAny(['ticket']) || https(d.ticket))
+          && (!changed.hasAny(['locationURL']) || https(d.get('locationURL','')))
+          && (!changed.hasAny(['restaurantURL']) || https(d.get('restaurantURL','')))
+          && (!changed.hasAny(['meal']) || (d.meal is string && d.meal.size() <= 300))
+          && (!changed.hasAny(['mealTime']) || d.get('mealTime','') is string)
+          && (!changed.hasAny(['bizumInstructions']) || (d.get('bizumInstructions','') is string && d.get('bizumInstructions','').size() <= 500))
+          && (!changed.hasAny(['activityDeposit']) || (d.get('activityDeposit',0) is number && d.get('activityDeposit',0) >= 0 && d.get('activityDeposit',0) <= 10000))
+          && (!changed.hasAny(['mealDeposit']) || (d.get('mealDeposit',0) is number && d.get('mealDeposit',0) >= 0 && d.get('mealDeposit',0) <= 10000))
           && (d.meal != '' || (d.get('mealDeposit',0) == 0 && d.get('restaurantURL','') == '' && d.get('mealTime','') == ''))
-          && exists(/databases/$(database)/documents/groups/$(d.group));
+          && (!changed.hasAny(['group']) || exists(/databases/$(database)/documents/groups/$(d.group)));
       }
-      allow create: if participant() && validEvent() && request.resource.data.createdBy == request.auth.uid;
+      allow create: if participant() && validEvent(true) && request.resource.data.createdBy == request.auth.uid;
       // Creators manage their own events; group admins may move events only between their groups.
       // The trusted timer may fill an absent finish time after the event day ends.
       allow update: if noticeSender() && resource.data.get('endAt',0) == 0
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['endAt'])
         && request.resource.data.endAt is int && request.resource.data.endAt > 0
         && request.resource.data.endAt <= request.time.toMillis();
-      allow update: if participant() && (resource.data.createdBy == request.auth.uid || (admin(resource.data.group) && admin(request.resource.data.group))) && validEvent() && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
+      function permittedEventEdit() {
+        let grantPath = /databases/$(database)/documents/grants/$(request.auth.uid);
+        let profilePath = /databases/$(database)/documents/profiles/$(request.auth.uid);
+        let reviewPath = /databases/$(database)/documents/membershipReviews/$(request.auth.uid);
+        let grant = exists(grantPath) ? get(grantPath).data : {'role':'','groups':[]};
+        let profile = exists(profilePath) ? get(profilePath).data : {'name':'','phone':''};
+        let review = exists(reviewPath) ? get(reviewPath).data : {'active':false,'phone':''};
+        return owner() || (profile.get('name','') != '' && profile.get('phone','') != ''
+          && (grant.get('role','') == 'community'
+            || (resource.data.group in grant.get('groups',[]) && request.resource.data.group in grant.get('groups',[]))
+            || (resource.data.createdBy == request.auth.uid
+              && (exists(grantPath) || (review.get('active',false) && review.get('phone','') == profile.phone)))))
+          || (noticeSender() && resource.data.createdBy == request.auth.uid);
+      }
+      allow update: if verified() && permittedEventEdit() && validEvent(false) && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
       // The app cancels by setting cancelled=true, preserving registrations and history.
       allow delete: if admin(resource.data.group);
       function latestMovement() {
