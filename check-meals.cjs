@@ -3,7 +3,8 @@ const source=fs.readFileSync('comunidad/index.html','utf8').match(/<script type=
 const c={URL,window:{location:{origin:'https://example.com',pathname:'/comunidad/',search:'?event=otro'}},Date,Map};vm.createContext(c);
 vm.runInContext(source.slice(source.indexOf('function parseMealMenu('),source.indexOf('const paymentLabels=')),c);
 assert.equal(JSON.stringify(c.parseMealMenu(' Carne\n\nPescado\r\nVegetariano ')),JSON.stringify(['Carne','Pescado','Vegetariano']));
-for(const bad of ['Carne\ncarne','a'.repeat(61),'1\n2\n3\n4\n5\n6\n7'])assert.throws(()=>c.parseMealMenu(bad));
+for(const bad of ['Carne\ncarne','a'.repeat(61),Array.from({length:13},(_,i)=>'Plato '+i).join('\n'),'Pescado 🐟'])assert.throws(()=>c.parseMealMenu(bad));
+assert.equal(c.parseMealMenu(Array.from({length:12},(_,i)=>'Plato '+i).join('\n')).length,12);
 const e={id:'e-test',title:'Comida & amigos',meal:'Restaurante',mealMenu:['Carne','Pescado','Vegetariano'],start:'2026-10-25T12:00:00Z'};
 const rows=[{uid:'ana',name:'Ana',companions:2,mealPeople:3},{uid:'luis',name:'Luis',companions:1,mealPeople:1},{uid:'no',name:'Solo actividad',companions:0,mealPeople:0}];
 const selections=new Map([['ana',{choices:['Carne','Pescado','Carne']}],['luis',{choices:['Vegetariano']}],['borrado',{choices:['Pescado']}]]);
