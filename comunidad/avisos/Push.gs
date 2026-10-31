@@ -19,12 +19,13 @@ function resolvePushRecipients_(devices,groupId,createdAt,blockedIds) {
   }
   return Array.from(unique.values());
 }
-function sendPush_(device,event,group,eventId,validateOnly) {
+function sendPush_(device,event,group,eventId,validateOnly,notice=null) {
   const message={token:device.token,data:{
     type:'new-event',uid:device.uid,eventId,
     title:'Nueva quedada · '+String(event.title).replace(/[\r\n]/g,' ').slice(0,150),
     body:String(group.name).slice(0,80)+' · '+String(event.location||'Abre la quedada para ver los detalles.').slice(0,140)
   },webpush:{headers:{TTL:'86400',Urgency:'normal'}}};
+  if(notice)Object.assign(message.data,notice);
   const response=UrlFetchApp.fetch('https://fcm.googleapis.com/v1/projects/'+PROJECT_ID+'/messages:send',{
     method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},
     payload:JSON.stringify({message,validate_only:validateOnly===true}),muteHttpExceptions:true
@@ -76,10 +77,11 @@ function procesarPush(){
   senderGuard_();
   const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
   try{
-    const token=firebaseToken_(),pending=pushPending_(token);if(!pending.length)return;
+    const token=firebaseToken_(),pending=pushPending_(token),seats=typeof seatPushPending_==='function'?seatPushPending_(token):[];if(!pending.length&&!seats.length)return;
     const devices=listDocuments_('pushDevices',token),blockedIds=new Set();
     for(const uid of new Set(devices.map(d=>d.uid))){const m=firestore_('/members/'+encodeURIComponent(uid),token);if(m&&decodeFields_(m.fields).blocked)blockedIds.add(uid);}
     const deadline=Date.now()+220000;
+    for(const queue of seats){if(Date.now()>deadline)break;processSeatPush_(queue,devices,blockedIds,token,deadline);}
     for(const queue of pending){if(Date.now()>deadline)break;processPushRequest_(queue,devices,blockedIds,token,deadline);}
   }finally{lock.releaseLock();}
 }

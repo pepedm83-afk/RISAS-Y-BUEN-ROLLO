@@ -4,7 +4,7 @@ Servicio de **correos de administración y notificaciones push opcionales por di
 
 El remitente sigue siendo `peperisasybuenrollo@gmail.com`; el Gmail antiguo y sus alias quedan excluidos de los correos. `Code.gs` conserva los avisos administrativos cada cinco minutos para nuevas quedadas de participantes, con destinatarios de comunidad y grupo, direcciones privadas, deduplicación y control de cuota.
 
-`Push.gs` procesa otra cola cada cinco minutos, sin depender de la cuota de Gmail. Envía únicamente a los dispositivos que hayan elegido el grupo antes de publicarse el evento. No envía eventos cancelados, pasados o de grupos retirados. No genera recordatorios ni avisos de edición.
+`Push.gs` procesa otra cola cada cinco minutos, sin depender de la cuota de Gmail. Envía únicamente a los dispositivos que hayan elegido el grupo antes de publicarse el evento. No envía eventos cancelados, pasados o de grupos retirados. También procesa avisos personales de plazas confirmadas desde espera con Seats.gs; incluye el plazo de Bizum configurado en el evento. Usa el mismo temporizador de cinco minutos y una cola independiente con identificadores de confirmación para evitar duplicados. No genera recordatorios ni avisos generales de edición.
 
 Los tokens de dispositivos se guardan de forma privada en Firebase. No hay contraseñas, claves privadas de servicio ni credenciales persistentes en este repositorio. El envío utiliza un token OAuth temporal con el alcance de mensajería de Firebase; no pide acceso a leer Gmail.
 
