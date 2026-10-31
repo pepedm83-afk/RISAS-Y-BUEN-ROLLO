@@ -302,12 +302,19 @@ function procesarResumenesAsistencia_(token) {
 }
 // One-time bootstrap for existing events and inscriptions. No new timer is installed.
 function inicializarResumenesAsistencia() {
-  senderGuard_();const token=firebaseToken_(),now=new Date().toISOString();
-  const result=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'events'}],where:{fieldFilter:{field:{fieldPath:'start'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:now}}}}})});
-  for(const item of result){if(!item.document)continue;const raw=item.document,id=raw.name.split('/').pop(),root=raw.name.slice(0,raw.name.indexOf('/events/'));
-    // Queue through the sender-only migration rule, preserving any newer pending revision.
+  senderGuard_();const token=firebaseToken_(),now=Date.now();
+  // Match the agenda's recent/future window, including events that started earlier today.
+  const recent=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'events'}],where:{fieldFilter:{field:{fieldPath:'start'},op:'GREATER_THAN_OR_EQUAL',value:{stringValue:new Date(now-3*86400000).toISOString()}}}}})});
+  const explicitEnd=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'events'}],where:{fieldFilter:{field:{fieldPath:'endAt'},op:'GREATER_THAN',value:{integerValue:String(now-172800000)}}}}})});
+  const result=new Map([...recent,...explicitEnd].filter(item=>item.document).map(item=>[item.document.name,item.document]));let queued=0;
+  for(const raw of result.values()){
+    if(decodeFields_(raw.fields).cancelled)continue;
+    const id=raw.name.split('/').pop(),root=raw.name.slice(0,raw.name.indexOf('/events/'));
+    // Repair only missing summaries. Do not recalculate existing summaries every day.
+    if(firestore_('/attendanceSummaries/'+encodeURIComponent(id),token))continue;
     const existing=firestore_('/attendanceSummaryQueue/'+encodeURIComponent(id),token);if(existing)continue;
-    try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes:[{update:{name:root+'/attendanceSummaryQueue/'+id,fields:{revision:encodeValue_(0)}},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}],currentDocument:{exists:false}}]})});}catch(error){console.warn('La cola ya se actualizó: '+id);}
+    try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes:[{update:{name:root+'/attendanceSummaryQueue/'+id,fields:{revision:encodeValue_(0)}},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}],currentDocument:{exists:false}}]})});queued++;}catch(error){console.warn('No se pudo preparar el recuento de '+id+': '+error.message);}
   }
+  console.log('Recuentos pendientes preparados: '+queued);
   procesarResumenesAsistencia_(token);
 }
