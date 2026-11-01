@@ -146,6 +146,13 @@ service cloud.firestore {
         && validDish(menu,4) && validDish(menu,5) && validDish(menu,6) && validDish(menu,7)
         && validDish(menu,8) && validDish(menu,9) && validDish(menu,10) && validDish(menu,11);
     }
+    // Bounded collection-group queries can retrieve only the caller's own rows.
+    // This avoids re-reading the event permission document for every closed card.
+    // Event rosters keep their existing rules; this grants no writes or broad scans.
+    match /{path=**}/attendees/{uid} {
+      allow list: if participant() && request.auth.uid == uid
+        && request.query.limit != null && request.query.limit <= 30;
+    }
     match /attendanceSummaryQueue/{eventId} {
       allow read, delete: if noticeSender();
       allow create, update: if noticeSender()
