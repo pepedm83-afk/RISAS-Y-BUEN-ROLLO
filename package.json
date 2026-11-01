@@ -2,8 +2,8 @@
   "name": "risas-y-buen-rollo-checks",
   "private": true,
   "scripts": {
-    "test": "node check-meals.cjs && node check-capacity.cjs && node check-registrations.cjs && node check-push.cjs && node --experimental-vm-modules check-calendar.cjs && node check-event-editor.cjs && node check-attendance-summaries.cjs && node check-seat-notifications.cjs && node check-names-picker.cjs && node check-card-registrations.cjs",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-risas --config firebase.qa.json \"node check-event-rules.cjs\""
+    "test": "node check-meals.cjs && node check-capacity.cjs && node check-registrations.cjs && node check-push.cjs && node --experimental-vm-modules check-calendar.cjs && node check-event-editor.cjs && node check-attendance-summaries.cjs && node check-seat-notifications.cjs && node check-names-picker.cjs && node check-card-registrations.cjs && node check-low-consumption.cjs",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-risas --config firebase.qa.json \"node check-low-consumption-rules.cjs && node check-event-rules.cjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "6.0.0",
