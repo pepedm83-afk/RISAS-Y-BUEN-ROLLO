@@ -11,3 +11,7 @@ Los tokens de dispositivos se guardan de forma privada en Firebase. No hay contr
 En iPhone se requiere iOS 16.4 o posterior, añadir a pantalla de inicio, abrir desde el icono y permitir notificaciones. Android requiere un navegador compatible y permiso. Cada dispositivo puede desactivarse; cerrar sesión detiene los avisos de esa cuenta en ese dispositivo.
 
 El estado `sent` confirma que el servicio aceptó el envío; la recepción en pantalla se verifica mediante una prueba real. La cuenta dedicada tiene el permiso de mensajería y FCM aceptó la validación sin entrega el 14/10/2026 a las 19:26. `push-config.json` contiene solo la clave pública y permite la activación voluntaria por dispositivo. La interfaz y agenda antiguas se mantienen separadas.
+
+## Reducción de lecturas (2026-11-01)
+
+Las valoraciones se preparan automáticamente como máximo cada quince minutos (96 barridos/día frente a 288), con caché que solo se guarda tras finalizar sin errores. Pueden tardar hasta quince minutos en habilitarse después del final. La preparación manual sigue siendo inmediata. Los recuentos de asistentes, correos, promociones de espera y push mantienen sus intervalos de cinco minutos. La pérdida de caché solo provoca otro barrido seguro.
