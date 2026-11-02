@@ -2,7 +2,8 @@
 // Requires the custom IAM role described in BAJAS.md. Never stores credentials.
 function bajasRoot_(){return 'projects/'+PROJECT_ID+'/databases/(default)/documents';}
 function bajasStore_(path,options){return requestJson_('https://firestore.googleapis.com/v1/'+bajasRoot_()+path,Object.assign({headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()}},options||{}));}
-function bajasAuth_(method,data){return requestJson_('https://identitytoolkit.googleapis.com/v1/projects/'+PROJECT_ID+'/accounts:'+method,{method:'post',contentType:'application/json',headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()},payload:JSON.stringify(data)});}
+function bajasAuthHeaders_(){return {Authorization:'Bearer '+ScriptApp.getOAuthToken(),'X-Goog-User-Project':PROJECT_ID};}
+function bajasAuth_(method,data){return requestJson_('https://identitytoolkit.googleapis.com/v1/projects/'+PROJECT_ID+'/accounts:'+method,{method:'post',contentType:'application/json',headers:bajasAuthHeaders_(),payload:JSON.stringify(data)});}
 function bajasFields_(values){return Object.fromEntries(Object.entries(values).map(([k,v])=>[k,encodeValue_(v)]));}
 function bajasPatch_(path,values){return bajasStore_(path+'?'+Object.keys(values).map(k=>'updateMask.fieldPaths='+encodeURIComponent(k)).join('&'),{method:'patch',contentType:'application/json',payload:JSON.stringify({fields:bajasFields_(values)})});}
 function bajasQuery_(collection,field,value){const rows=bajasStore_(':runQuery',{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:collection}],where:{fieldFilter:{field:{fieldPath:field},op:'EQUAL',value:encodeValue_(value)}},limit:100}})});return (rows||[]).filter(r=>r.document).map(r=>r.document);}
@@ -66,4 +67,14 @@ function activarBajas(){
  for(const trigger of ScriptApp.getProjectTriggers())if(trigger.getHandlerFunction()==='procesarBajas')ScriptApp.deleteTrigger(trigger);
  ScriptApp.newTrigger('procesarBajas').timeBased().everyMinutes(5).create();
  console.log('Servicio de bajas activado. No se ha borrado ninguna cuenta en esta comprobación.');
+}
+// Read-only diagnosis: no real account data and no private document contents are logged.
+function comprobarPermisosBajas(){
+ senderGuard_();
+ const checks=[{name:'Authentication',url:'https://identitytoolkit.googleapis.com/v1/projects/'+PROJECT_ID+'/accounts:lookup',options:{method:'post',contentType:'application/json',headers:bajasAuthHeaders_(),payload:JSON.stringify({localId:['permission-check-no-real-user']})}},{name:'Firestore',url:'https://firestore.googleapis.com/v1/'+bajasRoot_()+'/settings/accountDeletion',options:{method:'get'}}];
+ for(const check of checks){
+  const response=UrlFetchApp.fetch(check.url,Object.assign({muteHttpExceptions:true,headers:{Authorization:'Bearer '+ScriptApp.getOAuthToken()}},check.options));
+  let error={};try{error=JSON.parse(response.getContentText()).error||{};}catch(_){}
+  console.log(JSON.stringify({service:check.name,http:response.getResponseCode(),status:error.status||'',message:String(error.message||'').slice(0,700),reasons:(error.details||[]).map(d=>d.reason||'').filter(Boolean)}));
+ }
 }

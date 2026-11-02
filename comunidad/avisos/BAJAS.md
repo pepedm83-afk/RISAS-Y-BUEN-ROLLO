@@ -1,9 +1,10 @@
-# Bajas definitivas: activación pendiente
+# Bajas definitivas: servicio activado
 
-La interfaz permite solicitar «Rechazar solicitud» y «Eliminar definitivamente». Hasta autorizar y activar el servicio, ambas operaciones informan de que están pendientes de habilitar. Desactivar sigue siendo reversible.
+La interfaz permite solicitar «Rechazar solicitud» y «Eliminar definitivamente». El servicio se ha activado el 2 de noviembre de 2026. Desactivar sigue siendo reversible. Las eliminaciones solicitadas se muestran aparte de las solicitudes de aprobación, con su estado de proceso o revisión.
 
 El servicio de bajas se ejecuta en el proyecto de Apps Script existente, como `peperisasybuenrollo@gmail.com`. Requiere añadir el scope OAuth `https://www.googleapis.com/auth/cloud-platform` y un rol personalizado del proyecto `risas-y-buen-rollo` con:
 
+- `serviceusage.services.use`.
 - `firebaseauth.users.get`, `firebaseauth.users.update`, `firebaseauth.users.delete`.
 - `datastore.entities.get`, `datastore.entities.list`, `datastore.entities.create`, `datastore.entities.update`, `datastore.entities.delete`.
 
@@ -21,3 +22,11 @@ Una vez autorizado: cargar `Bajas.gs`, añadir el scope al manifiesto y ejecutar
 - Borra perfil, teléfono, dispositivos push, suscripciones, solicitudes y reserva del nombre, y finalmente la cuenta de Authentication.
 - Volver requiere registro nuevo, verificación de correo y aprobación. No recupera permisos ni reservas de la cuenta anterior.
 - `needsReview` requiere resolver el motivo y volver a dejar el estado en `pending` desde consola. Nunca se presenta como completado un borrado fallido.
+
+## Proyecto de las llamadas administrativas
+
+El servicio conserva su proyecto predeterminado de Apps Script. Las llamadas de Authentication usan `X-Goog-User-Project: risas-y-buen-rollo` y las credenciales OAuth de la cuenta del servicio. Esto requiere `serviceusage.services.use` en el proyecto Firebase, incluido en `bajas-role.json` (nueve permisos). No se usan claves privadas ni claves API para estas llamadas administrativas.
+
+El módulo y el scope cloud-platform están cargados y autorizados. La comprobación de Authentication devuelve HTTP 200. `activarBajas` ha completado correctamente la creación de configuración y programación. No se han borrado cuentas reales como prueba.
+
+`comprobarPermisosBajas` consulta un UID inexistente y la configuración del servicio. Solo registra códigos y errores, sin credenciales ni contenidos de personas.
