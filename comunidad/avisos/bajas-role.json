@@ -10,6 +10,7 @@
     "datastore.entities.list",
     "datastore.entities.create",
     "datastore.entities.update",
-    "datastore.entities.delete"
+    "datastore.entities.delete",
+    "serviceusage.services.use"
   ]
 }
