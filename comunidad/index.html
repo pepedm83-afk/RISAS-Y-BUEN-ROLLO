@@ -112,13 +112,13 @@ async function savePhoneProfile(f){
  try{sessionStorage.removeItem('community-phone-draft')}catch{}
  await refresh();msg('Teléfono guardado. '+(participant()?'Tu acceso está activo.':'Tu acceso está pendiente de revisión por un administrador de comunidad.'));
 }
-function memberActive(m){return !m.blocked&&!!m.phone&&(m.isAdmin||m.approvedByGrant||(m.review?.active===true&&m.review.phone===m.phone));}
+function memberActive(m){return !m.removalStatus&&!m.blocked&&!!m.phone&&(m.isAdmin||m.approvedByGrant||(m.review?.active===true&&m.review.phone===m.phone));}
 async function setMemberActive(m,active){
  if(!canManageGroups())throw Error('Solo los administradores de comunidad pueden activar miembros.');
  if(!m.phone)throw Error('Este miembro debe registrar su teléfono antes de activar el acceso.');
  if(active&&!confirm('¿Has comprobado que '+m.name+' pertenece a la comunidad con el teléfono '+m.phone+'?'))return false;
  if(m.blocked&&!owner())throw Error('Este acceso fue bloqueado por el administrador principal.');
- await runTransaction(db,async tx=>{const p=await tx.get(doc(db,'profiles',m.uid));if(p.data()?.phone!==m.phone)throw Error('El teléfono ha cambiado. Actualiza la lista antes de aprobarlo.');tx.set(doc(db,'membershipReviews',m.uid),{active,phone:m.phone,reviewedAt:serverTimestamp(),reviewedBy:user.uid});if(m.blocked&&active&&owner())tx.set(doc(db,'members',m.uid),{blocked:false});});
+ await runTransaction(db,async tx=>{const p=await tx.get(doc(db,'profiles',m.uid));if(active){const deletion=await tx.get(doc(db,'accountDeletionQueue',m.uid));if(['pending','needsReview'].includes(deletion.data()?.status))throw Error('Esta cuenta tiene una eliminación en curso.');}if(p.data()?.phone!==m.phone)throw Error('El teléfono ha cambiado. Actualiza la lista antes de aprobarlo.');tx.set(doc(db,'membershipReviews',m.uid),{active,phone:m.phone,reviewedAt:serverTimestamp(),reviewedBy:user.uid});if(m.blocked&&active&&owner())tx.set(doc(db,'members',m.uid),{blocked:false});});
  m.review={active,phone:m.phone,reviewedAt:new Date()};if(active)m.blocked=false;const cached=membersDirectory?.rows.find(x=>x.uid===m.uid);if(cached){cached.review=m.review;cached.blocked=m.blocked;}if(view==='members')renderMembers();msg(active?'Miembro activado.':'Acceso del miembro desactivado.');return true;
 }
 async function requestAccountDeletion(m,kind='delete'){
@@ -135,7 +135,7 @@ async function requestAccountDeletion(m,kind='delete'){
   if(phone)tx.set(doc(db,'membershipReviews',m.uid),{active:false,phone,reviewedAt:serverTimestamp(),reviewedBy:user.uid});
   tx.set(doc(db,'accountDeletionQueue',m.uid),{uid:m.uid,requestedBy:user.uid,kind,status:'pending',createdAt:serverTimestamp()});
  });
- membersDirectory=null;await loadActivationRequests(true);if(view==='members')await loadMembers(false,true);msg('Acceso desactivado. Eliminación solicitada; se completará en el siguiente ciclo del servicio.');
+ membersDirectory=null;await loadActivationRequests(true);if(view==='members')await loadMembers(false,true);msg('Acceso desactivado. Eliminación solicitada; el servicio la procesará automáticamente. Puedes ver su estado en Eliminaciones en curso.');
 }
 function addAbsenceControl(parent,e,uid,present,onChanged){
  if(!canManageEvent(e)||e.cancelled||Date.parse(e.start)>Date.now())return;
@@ -154,9 +154,10 @@ function renderMembers(){
  if(!shown.length){box.append(el('p','No hay miembros con ese nombre o filtro.'));return;}
  const letters=new Map();for(const m of shown){const first=(m.name||'#').normalize('NFD').replace(/[\u0300-\u036f]/g,'').charAt(0).toUpperCase(),key=/[A-ZÑ]/.test(first)?first:'#';if(!letters.has(key))letters.set(key,[]);letters.get(key).push(m);}
  for(const [letter,members] of letters){const group=el('details');group.className='member-letter';group.open=!!needle||['pending','feedback','comments'].includes(filter);group.append(el('summary',letter+' · '+members.length));
- for(const m of members){const records=memberHistory.get(m.uid)||[],detail=el('details');detail.className='member-detail';detail.append(el('summary',(m.name||'Sin nombre')+(membersHistoryKey?' · '+records.length+' quedadas':'')+' · '+(memberActive(m)?'Activo':'Pendiente / inactivo')));
- const activeLabel=el('label'),active=el('input');activeLabel.className='email-choice';active.type='checkbox';active.checked=memberActive(m);active.disabled=!m.phone||m.isAdmin||m.uid===user.uid||(m.blocked&&!owner());activeLabel.append(active,document.createTextNode('Activo'));detail.append(activeLabel);active.onchange=()=>run(async()=>{try{await setMemberActive(m,active.checked);}finally{renderMembers();}},active);
- if(!m.isAdmin&&!m.approvedByGrant&&m.uid!==user.uid)button(detail,'Eliminar definitivamente',()=>requestAccountDeletion(m));
+ for(const m of members){const records=memberHistory.get(m.uid)||[],detail=el('details');detail.className='member-detail';detail.append(el('summary',(m.name||'Sin nombre')+(membersHistoryKey?' · '+records.length+' quedadas':'')+' · '+(m.removalStatus?'Eliminación en curso':memberActive(m)?'Activo':'Pendiente / inactivo')));
+ const activeLabel=el('label'),active=el('input');activeLabel.className='email-choice';active.type='checkbox';active.checked=memberActive(m);active.disabled=!!m.removalStatus||!m.phone||m.isAdmin||m.uid===user.uid||(m.blocked&&!owner());activeLabel.append(active,document.createTextNode('Activo'));detail.append(activeLabel);active.onchange=()=>run(async()=>{try{await setMemberActive(m,active.checked);}finally{renderMembers();}},active);
+ if(m.removalStatus)detail.append(el('small',m.removalStatus==='needsReview'?'La eliminación necesita revisión. El acceso sigue desactivado.':'Eliminación solicitada. El servicio la está procesando.'));
+ if(!m.removalStatus&&!m.isAdmin&&!m.approvedByGrant&&m.uid!==user.uid)button(detail,'Eliminar definitivamente',()=>requestAccountDeletion(m));
  if(m.isAdmin)detail.append(el('small','Administrador autorizado. Sus permisos se gestionan en Grupos y permisos.'));
  if(m.phone){detail.append(el('p',m.phone));link(detail,'💬 Abrir WhatsApp','https://wa.me/'+m.phone.slice(1));}else detail.append(el('p','Pendiente de registrar su teléfono.'));
  for(const r of records){const entry=el('div');entry.className='admin-row';entry.append(el('p',r.event.title+' · '+new Date(r.event.start).toLocaleDateString('es-ES',{timeZone:'Europe/Madrid'})+(r.event.cancelled?' · Cancelada':'')),el('p',(r.present===false?'No asistió':'Asistencia')+' · '+(commentsForEvent(r.event.id,m.uid)?'Ha valorado':'Sin valoración')));addAbsenceControl(entry,r.event,m.uid,r.present,present=>{r.present=present;msg('Anotación guardada.');});detail.append(entry);}
@@ -228,7 +229,7 @@ function renderFinishedFeedback(e,row,date){
  detail.append(summary,body);row.append(date,detail);return row;
 }
 
-const APP_VERSION='2026.11.02.1';
+const APP_VERSION='2026.11.02.2';
 $('updateApp').onclick=()=>{if(user&&hasDraft())saveDraft();const url=new URL('./index.html',window.location.href);url.search=window.location.search;url.searchParams.set('v',APP_VERSION+'-'+Date.now());window.location.replace(url.href);};
 function msg(s){$('message').textContent=s}function verified(){return !!user&&user.emailVerified===true&&!blocked}function owner(){return verified()&&user.emailVerified&&user.email===OWNER}function canManageGroups(){return owner()||(participant()&&user.emailVerified&&community)}function canEdit(g){return owner()||(participant()&&user.emailVerified&&(community||grants.includes(g)))}function canManageEvent(e){return participant()&&(canEdit(e.group)||e.createdBy===user.uid)}
 let nameConflict=false,draftRestoredFor=null,authMode='login',adminIntent=false;try{adminIntent=sessionStorage.getItem('community-admin-registration')==='yes'}catch{}
@@ -449,10 +450,10 @@ async function loadMemberDirectory(force=false){
  if(!force&&membersDirectory?.uid===uid&&Date.now()-membersDirectory.at<5*60000)return membersDirectory.rows;
  if(membersDirectoryPending?.uid===uid)return membersDirectoryPending.promise;
  const promise=(async()=>{
-  const [profiles,statuses,reviews,adminGrants]=await Promise.all([getDocs(collection(db,'profiles')),getDocs(collection(db,'members')),getDocs(collection(db,'membershipReviews')),getDocs(collection(db,'grants'))]);
+  const [profiles,statuses,reviews,adminGrants,deletions]=await Promise.all([getDocs(collection(db,'profiles')),getDocs(collection(db,'members')),getDocs(collection(db,'membershipReviews')),getDocs(collection(db,'grants')),getDocs(query(collection(db,'accountDeletionQueue'),where('status','in',['pending','needsReview'])))]);
   if(user?.uid!==uid||!canManageGroups())throw Error('La sesión ha cambiado. Vuelve a abrir el panel.');
-  const state=new Map(statuses.docs.map(d=>[d.id,d.data()])),reviewMap=new Map(reviews.docs.map(d=>[d.id,d.data()])),adminIds=new Set(adminGrants.docs.filter(d=>d.data().role==='community'||d.data().groups?.length).map(d=>d.id)),approvedIds=new Set(adminGrants.docs.map(d=>d.id));
-  const rows=profiles.docs.map(d=>({uid:d.id,...d.data(),blocked:state.get(d.id)?.blocked===true,review:reviewMap.get(d.id),approvedByGrant:approvedIds.has(d.id),isAdmin:adminIds.has(d.id)||d.id===uid&&owner()}));
+  const deletionMap=new Map(deletions.docs.map(d=>[d.id,d.data().status])),state=new Map(statuses.docs.map(d=>[d.id,d.data()])),reviewMap=new Map(reviews.docs.map(d=>[d.id,d.data()])),adminIds=new Set(adminGrants.docs.filter(d=>d.data().role==='community'||d.data().groups?.length).map(d=>d.id)),approvedIds=new Set(adminGrants.docs.map(d=>d.id));
+  const rows=profiles.docs.map(d=>({uid:d.id,...d.data(),removalStatus:deletionMap.get(d.id)||'',blocked:state.get(d.id)?.blocked===true,review:reviewMap.get(d.id),approvedByGrant:approvedIds.has(d.id),isAdmin:adminIds.has(d.id)||d.id===uid&&owner()}));
   membersDirectory={uid,at:Date.now(),rows};return rows;
  })();membersDirectoryPending={uid,promise};
  try{return await promise;}finally{if(membersDirectoryPending?.promise===promise)membersDirectoryPending=null;}
@@ -487,13 +488,14 @@ async function loadActivationRequests(force=false){
  if(!canManageGroups())return;
  const current=user,rows=await loadMemberDirectory(force);
  if(user?.uid!==current.uid||!canManageGroups())return;
- const pending=rows.filter(m=>m.phone&&!m.blocked&&!m.isAdmin&&!memberActive(m)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
- renderActivationRequests(pending);
+ const pending=rows.filter(m=>!m.removalStatus&&m.phone&&!m.blocked&&!m.isAdmin&&!memberActive(m)).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+ renderActivationRequests(pending,rows.filter(m=>m.removalStatus));
 }
-function renderActivationRequests(pending){
+function renderActivationRequests(pending,deletions=[]){
  const box=$('phoneRequests');box.replaceChildren();$('activationHeading').textContent='Solicitudes pendientes · '+pending.length;
  $('viewOwner').textContent=(owner()?'Grupos y permisos':'Administrar grupos')+(pending.length?' · '+pending.length+' pendientes':'');
- if(!pending.length){box.append(el('p','No hay accesos pendientes de activación.'));return;}
+ if(!pending.length)box.append(el('p','No hay accesos pendientes de activación.'));
+ if(deletions.length){const progress=el('details');progress.append(el('summary','Eliminaciones en curso · '+deletions.length));for(const m of deletions)progress.append(el('p',m.name+' · '+(m.removalStatus==='needsReview'?'Necesita revisión. Acceso desactivado.':'Eliminación solicitada. Se está procesando.')));box.append(progress);}
  for(const m of pending){const card=el('div');card.className='member-detail';card.append(el('strong',m.name),el('p',m.phone),el('small',m.review?.phone&&m.review.phone!==m.phone?'Ha cambiado su teléfono. Requiere nueva comprobación.':'Teléfono registrado. Pendiente de comprobar y activar.'));
  link(card,'Comprobar por WhatsApp','https://wa.me/'+m.phone.slice(1));
  button(card,'Rechazar solicitud',()=>requestAccountDeletion(m,'reject'));
