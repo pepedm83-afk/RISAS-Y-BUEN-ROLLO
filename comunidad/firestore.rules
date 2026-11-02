@@ -27,6 +27,22 @@ service cloud.firestore {
         && request.resource.data.reviewedAt == request.time && request.resource.data.reviewedBy == request.auth.uid;
       allow delete: if false;
     }
+    match /settings/accountDeletion {
+      allow read: if communityAdmin() || noticeSender();
+      allow write: if false; // Activation is a privileged server operation.
+    }
+    match /accountDeletionQueue/{uid} {
+      allow read: if communityAdmin() || noticeSender();
+      allow create: if communityAdmin() && uid != request.auth.uid
+        && get(/databases/$(database)/documents/settings/accountDeletion).data.enabled == true
+        && exists(/databases/$(database)/documents/profiles/$(uid))
+        && !exists(/databases/$(database)/documents/grants/$(uid))
+        && request.resource.data.keys().hasOnly(['uid','requestedBy','kind','status','createdAt'])
+        && request.resource.data.uid == uid && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.kind in ['reject','delete'] && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
+    }
     function eligibleMember(uid) {
       let p = get(/databases/$(database)/documents/profiles/$(uid)).data;
       let r = /databases/$(database)/documents/membershipReviews/$(uid);
@@ -41,10 +57,7 @@ service cloud.firestore {
       return p.get('name','') != '' && p.get('phone','') != '' && ((exists(r) && get(r).data.active == true && get(r).data.phone == p.phone) || exists(/databases/$(database)/documents/grants/$(uid)));
     }
     function feedbackSeat(eventId,uid) {
-      let path = /databases/$(database)/documents/events/$(eventId);
-      let seat = get(/databases/$(database)/documents/events/$(eventId)/feedbackEligibility/$(uid)).data;
-      let revision = exists(/databases/$(database)/documents/events/$(eventId)/attendanceState/current) ? get(/databases/$(database)/documents/events/$(eventId)/attendanceState/current).data.revision : 0;
-      return seat.admitted == true && seat.revision == revision && seat.endAt == get(path).data.endAt
+      return exists(/databases/$(database)/documents/events/$(eventId)/attendees/$(uid))
         && (!exists(/databases/$(database)/documents/events/$(eventId)/checkins/$(uid)) || get(/databases/$(database)/documents/events/$(eventId)/checkins/$(uid)).data.present != false);
     }
     // Feedback is identified for community admins and never visible to other members.
@@ -61,7 +74,7 @@ service cloud.firestore {
         && request.resource.data.comment is string && request.resource.data.comment.size() <= 1500
         && request.resource.data.createdAt == request.time
         && get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('endAt',4102444800000) <= request.time.toMillis()
-        && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 172800000
+        && request.time.toMillis() < get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.endAt + 86400000
         && !get(/databases/$(database)/documents/events/$(request.resource.data.eventId)).data.get('cancelled',false)
         && feedbackSeat(request.resource.data.eventId,request.auth.uid)
         && getAfter(/databases/$(database)/documents/events/$(request.resource.data.eventId)/feedbackReceipts/$(request.auth.uid)).data.feedbackId == feedbackId;
