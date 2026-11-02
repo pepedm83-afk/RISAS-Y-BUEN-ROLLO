@@ -1,0 +1,15 @@
+{
+  "title": "Risas account deletion worker",
+  "description": "Procesa bajas solicitadas por administradores de la comunidad. Permite gestionar datos del proyecto y eliminar cuentas de Authentication.",
+  "stage": "GA",
+  "includedPermissions": [
+    "firebaseauth.users.get",
+    "firebaseauth.users.update",
+    "firebaseauth.users.delete",
+    "datastore.entities.get",
+    "datastore.entities.list",
+    "datastore.entities.create",
+    "datastore.entities.update",
+    "datastore.entities.delete"
+  ]
+}
