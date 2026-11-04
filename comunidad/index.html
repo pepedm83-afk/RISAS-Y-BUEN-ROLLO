@@ -208,8 +208,10 @@ async function loadFeedbackAccess(){
  const current=user;feedbackAccess=new Map();if(!participant())return;
  const recent=events.filter(e=>feedbackOpen(e));
  const entries=await Promise.all(recent.map(async e=>{
-  const [signup,absence,receipt]=await Promise.all([getDoc(doc(db,'events',e.id,'attendees',current.uid)),getDoc(doc(db,'events',e.id,'checkins',current.uid)),getDoc(doc(db,'events',e.id,'feedbackReceipts',current.uid))]);
-  if(!signup.exists()||absence.data()?.present===false)return null;
+  const signup=await getDoc(doc(db,'events',e.id,'attendees',current.uid));
+  if(!signup.exists())return null;
+  const [absence,receipt]=await Promise.all([getDoc(doc(db,'events',e.id,'checkins',current.uid)),getDoc(doc(db,'events',e.id,'feedbackReceipts',current.uid))]);
+  if(absence.data()?.present===false)return null;
   return [e.id,{sent:receipt.exists()}];
  }));if(user?.uid===current.uid)feedbackAccess=new Map(entries.filter(Boolean));
 }
@@ -229,7 +231,7 @@ function renderFinishedFeedback(e,row,date){
  detail.append(summary,body);row.append(date,detail);return row;
 }
 
-const APP_VERSION='2026.11.02.2';
+const APP_VERSION='2026.11.04.1';
 $('updateApp').onclick=()=>{if(user&&hasDraft())saveDraft();const url=new URL('./index.html',window.location.href);url.search=window.location.search;url.searchParams.set('v',APP_VERSION+'-'+Date.now());window.location.replace(url.href);};
 function msg(s){$('message').textContent=s}function verified(){return !!user&&user.emailVerified===true&&!blocked}function owner(){return verified()&&user.emailVerified&&user.email===OWNER}function canManageGroups(){return owner()||(participant()&&user.emailVerified&&community)}function canEdit(g){return owner()||(participant()&&user.emailVerified&&(community||grants.includes(g)))}function canManageEvent(e){return participant()&&(canEdit(e.group)||e.createdBy===user.uid)}
 let nameConflict=false,draftRestoredFor=null,authMode='login',adminIntent=false;try{adminIntent=sessionStorage.getItem('community-admin-registration')==='yes'}catch{}
@@ -591,7 +593,7 @@ async function lookupOwnAttendance(items,uid){
 async function loadMyAttendance(items,force=false){
  if(!participant())return;const uid=user.uid,session=generation,remaining=[],waiting=[];
  for(const e of items){const key=uid+':'+e.id,cached=ownAttendanceCache.get(key);
-  if(!force&&cached&&Date.now()-cached.at<60000){if(cached.registered)myEventIds.add(e.id);else myEventIds.delete(e.id);}
+  if(!force&&cached&&Date.now()-cached.at<300000){if(cached.registered)myEventIds.add(e.id);else myEventIds.delete(e.id);}
   else if(ownAttendancePending.has(key))waiting.push([e,ownAttendancePending.get(key)]);else remaining.push(e);
  }
  for(let offset=0;offset<remaining.length;offset+=30){
@@ -686,7 +688,7 @@ function showCardCount(e,value){for(const node of $('events').querySelectorAll('
 const cardCountPending=new Map();
 async function loadCardCounts(items){
  if(!participant())return;const uid=user.uid,session=generation,remaining=[],waiting=[];
- for(const e of items){const cached=cardCountCache.get(e.id),key=session+':'+uid+':'+e.id;if(cached?.uid===uid&&Date.now()-cached.at<60000)showCardCount(e,cached.value);else if(cardCountPending.has(key))waiting.push(cardCountPending.get(key));else remaining.push(e);}
+ for(const e of items){const cached=cardCountCache.get(e.id),key=session+':'+uid+':'+e.id;if(cached?.uid===uid&&Date.now()-cached.at<300000)showCardCount(e,cached.value);else if(cardCountPending.has(key))waiting.push(cardCountPending.get(key));else remaining.push(e);}
  for(let offset=0;offset<remaining.length;offset+=30){
   const batch=remaining.slice(offset,offset+30),before=new Map(batch.map(e=>[e.id,cardCountCache.get(e.id)]));
   const pending=getDocs(query(collection(db,'attendanceSummaries'),where(documentId(),'in',batch.map(e=>e.id)))).then(snapshot=>{
