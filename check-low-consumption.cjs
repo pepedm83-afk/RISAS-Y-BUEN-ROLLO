@@ -13,7 +13,8 @@ const src=fs.readFileSync('comunidad/index.html','utf8').match(/<script type="mo
  const reopened=await c.readAttendance('e');assert.equal(full,2,'Reload must reuse the session roster after checking server revision');assert.equal(reopened.parties.get('u').admittedAt,first.parties.get('u').admittedAt,'Bizum admission timestamp must survive serialization');
  revision=2;ops.push({seq:2,uid:'u',kind:'leave',people:0,legacyPeople:0});const updated=await c.readAttendance('e');assert.equal(updated.used,0);assert.equal(incremental,1);assert.equal(full,2,'Only new operations and affected parties may be read');
  c.clearPersonalRosterCache('u');assert.equal(data.size,0,'Logout must remove the session roster');
- const cache=new Map();let at=0,scans=0;const server={console,Date:{now:()=>at},CacheService:{getScriptCache:()=>({get:k=>cache.get(k)||null,put:(k,v)=>cache.set(k,v)})}};vm.createContext(server);vm.runInContext(fs.readFileSync('comunidad/avisos/Code.gs','utf8'),server);server.prepararValoraciones_=()=>{scans++;};
- for(let tick=0;tick<288;tick++){at=tick*300000;server.prepararValoracionesPeriodicas_('token');}assert.equal(scans,96);cache.clear();server.prepararValoraciones_=()=>{throw Error('network');};assert.throws(()=>server.prepararValoracionesPeriodicas_('token'));assert.equal(cache.size,0,'A failed scan must not suppress retries');
- console.log('OK: cached roster revalidated after reload, incremental leave, timestamps/Bizum preserved, logout cleanup; feedback scans 288 -> 96/day, retry after failure.');
+ let scans=0;const server={console};vm.createContext(server);vm.runInContext(fs.readFileSync('comunidad/avisos/Code.gs','utf8'),server);server.prepararValoraciones_=()=>{scans++;};
+ for(let tick=0;tick<288;tick++)server.prepararValoracionesPeriodicas_('token');assert.equal(scans,0,'Obsolete eligibility must never be scanned on a timer');
+ assert(!fs.readFileSync('comunidad/avisos/Code.gs','utf8').match(/try \{ prepararValoracionesPeriodicas_/),'Mail processor must not invoke obsolete eligibility scans');
+ console.log('OK: cached roster revalidated, incremental leave, Bizum timestamps, logout cleanup; obsolete feedback scans 96 -> 0/day.');
 })().catch(e=>{console.error(e);process.exit(1)});
