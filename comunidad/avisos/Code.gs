@@ -170,7 +170,7 @@ function procesarAvisos() {
   try {
     const token = firebaseToken_();
     try { procesarResumenesAsistencia_(token); } catch (error) { console.warn('Recuentos pendientes: ' + error.message); }
-    try { prepararValoracionesPeriodicas_(token); } catch (error) { console.warn('No se pudieron preparar las valoraciones: ' + error.message); }
+    // Feedback uses the member's signup/check-in directly; no periodic eligibility scan.
     const pending = pendingRequests_(token);
     if (!pending.length) return;
     const grants = listDocuments_('grants', token);
@@ -239,14 +239,9 @@ function finalSinHora_(start) {
   return next.getTime()-minutes*60000;
 }
 function prepararValoraciones() { senderGuard_(); prepararValoraciones_(firebaseToken_()); }
-// Feedback can wait up to fifteen minutes after an event finishes.
-// Attendance summaries, waiting-list promotions, push and email retain their five-minute cadence.
-function prepararValoracionesPeriodicas_(token) {
-  let cache=null;try{cache=CacheService.getScriptCache();if(Number(cache.get('feedback-scan-next-v2')||0)>Date.now())return;}catch(_){}
-  prepararValoraciones_(token);
-  // Cache is an optimization only. An eviction means another safe scan; failures are retried.
-  if(cache)try{cache.put('feedback-scan-next-v2',String(Date.now()+900000),900);}catch(_){}
-}
+// Compatibility for old callers: eligibility is now checked directly by the app and rules.
+// Do not scan finished events or rebuild obsolete feedbackEligibility documents on a timer.
+function prepararValoracionesPeriodicas_(token) { return; }
 function prepararValoraciones_(token) {
   const now = Date.now();
   const result = firestore_(':runQuery', token, {method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{
