@@ -24,6 +24,8 @@ failure=null;version='recovered';ctx.procesarResumenesAsistencia_('token');asser
 failure=Object.assign(Error('bad'),{httpCode:400,status:'INVALID_ARGUMENT'});ctx.procesarResumenesAsistencia_('token');const n=requests.length;ctx.procesarResumenesAsistencia_('token');assert.equal(requests.length,n);assert(warnings.some(w=>w.includes('INVALID_ARGUMENT')));props.clear();
 locked=true;ctx.procesarResumenesAsistencia_('token');assert.equal(requests.length,n);locked=false;
 reads=[];writes=null;ctx.firestore_=()=>[];ctx.procesarResumenesAsistencia_('token');assert.equal(reads.length,0);assert.equal(writes,null);
+// A caller already holding the shared script lock keeps ownership until its own finally.
+ctx.procesarResumenesAsistencia_('token',{tryLock:()=>{throw Error('Must not reacquire');},releaseLock:()=>{throw Error('Must not release caller lock');}});
 console.log('OK: REST transaction, correct totals, rollback, revision-aware backoff, shared failure pause and overlap protection.');
 // Structured HTTP codes are preserved without logging server messages or credentials.
 ctx.UrlFetchApp={fetch:()=>({getResponseCode:()=>403,getContentText:()=>JSON.stringify({error:{status:'PERMISSION_DENIED',message:'private details'}})})};
