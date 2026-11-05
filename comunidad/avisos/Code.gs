@@ -172,7 +172,7 @@ function procesarAvisos() {
   if (!lock.tryLock(1000)) return;
   try {
     const token = firebaseToken_();
-    try { procesarResumenesAsistencia_(token); } catch (error) { console.warn('Recuentos pendientes: ' + error.message); }
+    try { procesarResumenesAsistencia_(token, lock); } catch (error) { console.warn('Recuentos pendientes: ' + error.message); }
     // Feedback uses the member's signup/check-in directly; no periodic eligibility scan.
     const pending = pendingRequests_(token);
     if (!pending.length) return;
@@ -301,8 +301,9 @@ function attendanceSnapshot_(id, token) {
 // Backoff lives in Apps Script, so skipping a failed revision reads no roster.
 // A new queue version bypasses the per-event pause. Shared API failures pause
 // the whole worker, rather than repeating the same failure for every event.
-function procesarResumenesAsistencia_(token) {
-  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
+function procesarResumenesAsistencia_(token, existingLock) {
+  const ownsLock=!existingLock,lock=existingLock||LockService.getScriptLock();
+  if(ownsLock&&!lock.tryLock(1000))return;
   const props=PropertiesService.getScriptProperties(),prefix='attendanceRetryV2:';
   try {
     if(Number(props.getProperty(prefix+'pause')||0)>Date.now())return;
@@ -348,7 +349,7 @@ function procesarResumenesAsistencia_(token) {
         if(snapshot&&!committed)try{firestore_(':rollback',token,{method:'post',contentType:'application/json',payload:JSON.stringify({transaction:snapshot.transaction})});}catch(_){}
       }
     }
-  } finally {lock.releaseLock();}
+  } finally {if(ownsLock)lock.releaseLock();}
 }
 // One-time bootstrap for existing events and inscriptions. No new timer is installed.
 function inicializarResumenesAsistencia() {
