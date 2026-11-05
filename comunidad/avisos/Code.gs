@@ -27,8 +27,11 @@ function requestJson_(url, options) {
   if (code === 404) return null;
   if (code < 200 || code >= 300) {
     let reason = '';
-    try { reason = JSON.parse(response.getContentText()).error.message.match(/^[A-Z][A-Z0-9_]{2,60}\b/)?.[0] || ''; } catch (_) {}
-    throw new Error('El servicio no pudo completar la operación (HTTP ' + code + (reason ? ', ' + reason : '') + ').');
+    try { reason = JSON.parse(response.getContentText()).error.status || ''; } catch (_) {}
+    if (!/^[A-Z_]{3,60}$/.test(reason)) reason = '';
+    const error = new Error('El servicio no pudo completar la operación (HTTP ' + code + (reason ? ', ' + reason : '') + ').');
+    error.httpCode = code; error.status = reason;
+    throw error;
   }
   const text = response.getContentText();
   return text ? JSON.parse(text) : {};
@@ -284,26 +287,68 @@ function prepararValoraciones_(token) {
   }
 }
 
-// Only queued revisions are counted. Idle events do not load any attendee documents.
+// Read all guards in a REST read/write transaction. "verify" is an internal SDK
+// write operation, not a supported field in the public REST Commit API.
+function attendanceSnapshot_(id, token) {
+  const root='projects/'+PROJECT_ID+'/databases/(default)/documents';
+  const names=[root+'/events/'+id,root+'/events/'+id+'/attendanceState/current',root+'/attendanceSummaryQueue/'+id,root+'/events/'+id+'/seatNotificationState/current'];
+  const response=firestore_(':batchGet',token,{method:'post',contentType:'application/json',payload:JSON.stringify({documents:names,newTransaction:{readWrite:{}}})});
+  const transaction=response.find(row=>row.transaction)?.transaction;
+  if(!transaction)throw new Error('No se pudo iniciar la transacción del recuento.');
+  const docs=new Map(response.filter(row=>row.found).map(row=>[row.found.name,row.found]));
+  return {transaction,event:docs.get(names[0]),state:docs.get(names[1]),queue:docs.get(names[2]),cursor:docs.get(names[3])||null};
+}
+// Backoff lives in Apps Script, so skipping a failed revision reads no roster.
+// A new queue version bypasses the per-event pause. Shared API failures pause
+// the whole worker, rather than repeating the same failure for every event.
 function procesarResumenesAsistencia_(token) {
-  const pending=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'attendanceSummaryQueue'}],limit:100}})});
-  for(const item of pending){
-    const queue=item.document;if(!queue)continue;const id=queue.name.split('/').pop(),path='/events/'+encodeURIComponent(id);
-    const raw=firestore_(path,token);if(!raw)continue;
-    const e=decodeFields_(raw.fields),state=firestore_(path+'/attendanceState/current',token),revision=state?decodeFields_(state.fields).revision:0;
-    const rows=listDocuments_('events/'+encodeURIComponent(id)+'/attendees',token).map(r=>Object.assign({uid:r.id},r));
-    const ops=listDocuments_('events/'+encodeURIComponent(id)+'/attendanceChanges',token);
-    if(ops.length!==revision)continue;
-    const result=allocateFeedbackSeats_(rows,ops,e.capacity||0),root=raw.name.slice(0,raw.name.indexOf('/events/'));
-    const summary={confirmed:result.used,waiting:result.waitingPeople,capacity:e.capacity||0,revision};
-    const fields=Object.fromEntries(Object.entries(summary).map(([key,value])=>[key,encodeValue_(value)]));
-    const writes=[{verify:raw.name,currentDocument:{updateTime:raw.updateTime}}];
-    writes.push(state?{verify:state.name,currentDocument:{updateTime:state.updateTime}}:{verify:raw.name+'/attendanceState/current',currentDocument:{exists:false}});
-    writes.push({update:{name:root+'/attendanceSummaries/'+id,fields},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}]});
-    if(typeof appendSeatNotifications_==='function')appendSeatNotifications_(writes,raw,e,rows,result,revision,token);
-    writes.push({delete:queue.name,currentDocument:{updateTime:queue.updateTime}});
-    try{firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({writes})});}catch(error){console.warn('Recuento pendiente de reintento: '+id);}
-  }
+  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))return;
+  const props=PropertiesService.getScriptProperties(),prefix='attendanceRetryV2:';
+  try {
+    if(Number(props.getProperty(prefix+'pause')||0)>Date.now())return;
+    const pending=firestore_(':runQuery',token,{method:'post',contentType:'application/json',payload:JSON.stringify({structuredQuery:{from:[{collectionId:'attendanceSummaryQueue'}],limit:100}})});
+    const active=new Set(pending.filter(item=>item.document).map(item=>prefix+item.document.name.split('/').pop()));
+    for(const key of Object.keys(props.getProperties()))if(key.startsWith(prefix)&&key!==prefix+'pause'&&!active.has(key))props.deleteProperty(key);
+    for(const item of pending){
+      const queue=item.document;if(!queue)continue;
+      const id=queue.name.split('/').pop(),key=prefix+id;
+      let retry;try{retry=JSON.parse(props.getProperty(key)||'null');}catch(_){retry=null;}
+      if(retry&&retry.version===queue.updateTime&&retry.after>Date.now())continue;
+      let snapshot,committed=false;
+      try {
+        snapshot=attendanceSnapshot_(id,token);
+        const {event:raw,state}=snapshot;
+        if(!snapshot.queue||snapshot.queue.updateTime!==queue.updateTime)continue;
+        // Drop only an orphaned work item, never an event or an inscription.
+        if(!raw){
+          firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({transaction:snapshot.transaction,writes:[{delete:queue.name,currentDocument:{updateTime:queue.updateTime}}]})});
+          committed=true;props.deleteProperty(key);continue;
+        }
+        const e=decodeFields_(raw.fields),revision=state?decodeFields_(state.fields).revision:0;
+        const rows=listDocuments_('events/'+encodeURIComponent(id)+'/attendees',token).map(r=>Object.assign({uid:r.id},r));
+        const ops=listDocuments_('events/'+encodeURIComponent(id)+'/attendanceChanges',token);
+        if(ops.length!==revision)throw new Error('La revisión cambió durante el recuento.');
+        const result=allocateFeedbackSeats_(rows,ops,e.capacity||0),root=raw.name.slice(0,raw.name.indexOf('/events/'));
+        const summary={confirmed:result.used,waiting:result.waitingPeople,capacity:e.capacity||0,revision};
+        const fields=Object.fromEntries(Object.entries(summary).map(([key,value])=>[key,encodeValue_(value)]));
+        const writes=[{update:{name:root+'/attendanceSummaries/'+id,fields},updateTransforms:[{fieldPath:'updatedAt',setToServerValue:'REQUEST_TIME'}]}];
+        if(typeof appendSeatNotifications_==='function')appendSeatNotifications_(writes,raw,e,rows,result,revision,token,snapshot);
+        writes.push({delete:queue.name,currentDocument:{updateTime:queue.updateTime}});
+        firestore_(':commit',token,{method:'post',contentType:'application/json',payload:JSON.stringify({transaction:snapshot.transaction,writes})});
+        committed=true;props.deleteProperty(key);
+      } catch(error) {
+        const attempts=retry&&retry.version===queue.updateTime?retry.attempts+1:1;
+        const delay=Math.min(60,5*Math.pow(3,Math.min(attempts-1,3)))*60000;
+        props.setProperty(key,JSON.stringify({version:queue.updateTime,attempts,after:Date.now()+delay}));
+        console.warn('Recuento aplazado: '+id+'; HTTP '+(error.httpCode||0)+'; '+(error.status||'LOCAL_ERROR')+'; intento '+attempts);
+        if([400,401,403,429].includes(error.httpCode)){
+          props.setProperty(prefix+'pause',String(Date.now()+(error.httpCode===429?60:30)*60000));break;
+        }
+      } finally {
+        if(snapshot&&!committed)try{firestore_(':rollback',token,{method:'post',contentType:'application/json',payload:JSON.stringify({transaction:snapshot.transaction})});}catch(_){}
+      }
+    }
+  } finally {lock.releaseLock();}
 }
 // One-time bootstrap for existing events and inscriptions. No new timer is installed.
 function inicializarResumenesAsistencia() {

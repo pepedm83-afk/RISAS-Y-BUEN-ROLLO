@@ -3,10 +3,10 @@
 const SEAT_PUSH_SINCE = '2026-10-31T20:32:09.834656+00:00';
 function seatEventOpen_(event){return !event.cancelled&&(event.endAt||finalSinHora_(event.start))>Date.now();}
 function seatDeadline_(event,seat){return event.paymentWindowHours&&seat.admittedAt?seat.admittedAt+event.paymentWindowHours*3600000:0;}
-function appendSeatNotifications_(writes,raw,event,rows,result,revision,token){
-  const root=raw.name.slice(0,raw.name.indexOf('/events/')),id=raw.name.split('/').pop(),cursor=firestore_('/events/'+encodeURIComponent(id)+'/seatNotificationState/current',token),processed=cursor?decodeFields_(cursor.fields).revision:0;
+function appendSeatNotifications_(writes,raw,event,rows,result,revision,token,snapshot){
+  if(!snapshot||!snapshot.transaction)throw new Error('Los avisos de plaza requieren la transacción del recuento.');
+  const root=raw.name.slice(0,raw.name.indexOf('/events/')),id=raw.name.split('/').pop(),cursor=snapshot.cursor,processed=cursor?decodeFields_(cursor.fields).revision:0;
   if(processed>=revision)return;
-  writes.push(cursor?{verify:cursor.name,currentDocument:{updateTime:cursor.updateTime}}:{verify:raw.name+'/seatNotificationState/current',currentDocument:{exists:false}});
   writes.push({update:{name:raw.name+'/seatNotificationState/current',fields:{revision:encodeValue_(revision)}}});
   if(!seatEventOpen_(event))return;
   for(const seat of result.confirmed){
