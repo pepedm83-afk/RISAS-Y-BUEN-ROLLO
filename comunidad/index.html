@@ -559,8 +559,10 @@ function watchAgendaEnd(sentinel,moreButton){
  const session=generation,token=viewGeneration;
  const observer=new IntersectionObserver(entries=>{
   if(agendaScrollObserver!==observer||generation!==session||viewGeneration!==token||!sentinel.isConnected||$('events').hidden||!entries.some(entry=>entry.target===sentinel&&entry.isIntersecting))return;
+  // Do not replace an attendance form while the member is editing it.
+  if(agendaHasUnsavedAttendance())return;
   // One page per visible end marker. Rendering the new cards installs the next marker.
-  stopAgendaAutoLoad();run(moreAgenda,moreButton);
+  stopAgendaAutoLoad();run(()=>moreAgenda(true),moreButton);
  },{rootMargin:'0px',threshold:0.1});
  agendaScrollObserver=observer;observer.observe(sentinel);
 }
@@ -601,9 +603,11 @@ async function readEventPages(feeds){
  })();state.pending=task;try{await task;}finally{if(state.pending===task)state.pending=null;}
 }
 async function ensureAgendaPage(){await readEventPages(agendaFeeds().filter(feed=>!feed.loaded));}
-async function moreAgenda(){
+function agendaHasUnsavedAttendance(){return [...$('events').querySelectorAll('.rsvp')].some(host=>host.rosterDirty);}
+async function moreAgenda(automatic=false){
  const loaded=visibleEvents().filter(e=>agendaLayout!=='month'||madridDay(e.start).slice(0,7)===agendaMonth).length;
  if(loaded<=agendaVisibleLimit||agendaLayout==='month')await readEventPages(agendaFeeds());
+ if(automatic&&agendaHasUnsavedAttendance())return;
  agendaVisibleLimit+=EVENT_PAGE_SIZE;render();
 }
 async function loadEvents(){
