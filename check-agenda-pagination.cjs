@@ -3,9 +3,10 @@ const html=fs.readFileSync('comunidad/index.html','utf8'),source=html.match(/<sc
 const row=(id,data)=>({id,ref:{path:'events/'+id},data:()=>data,exists:()=>true});
 async function harness(){
  const dom=new JSDOM(html.replace(/<script[\s\S]*?<\/script>/g,''),{url:'https://example.com/comunidad/',runScripts:'outside-only'}),c=dom.getInternalVMContext(),calls=[],owns=new Set();
- let dataset=[],gate=null;
+ let dataset=[],gate=null;const observers=[];
+ class Observer{constructor(callback){this.callback=callback;this.stopped=false;observers.push(this);}observe(target){this.target=target;}disconnect(){this.stopped=true;}fire(){this.callback([{target:this.target,isIntersecting:true}]);}}
  const ref=(base,...parts)=>({path:[base?.path,...parts].filter(Boolean).join('/')});
- Object.assign(c,{fetch:async()=>({ok:true,json:async()=>({projectId:'demo'})}),initializeApp:()=>({}),getAuth:()=>({}),getFirestore:()=>({}),onAuthStateChanged:()=>{},createPushControls:()=>({load:async()=>{}}),setInterval:()=>0,
+ Object.assign(c,{fetch:async()=>({ok:true,json:async()=>({projectId:'demo'})}),initializeApp:()=>({}),getAuth:()=>({}),getFirestore:()=>({}),onAuthStateChanged:()=>{},IntersectionObserver:Observer,createPushControls:()=>({load:async()=>{}}),setInterval:()=>0,
  collection:ref,doc:ref,collectionGroup:(_,path)=>({path,group:true}),documentId:()=>'__name__',where:(field,op,value)=>({type:'where',field,op,value}),orderBy:(field,direction='asc')=>({type:'order',field,direction}),limit:n=>({type:'limit',n}),startAfter:cursor=>({type:'cursor',cursor}),query:(base,...parts)=>({...base,parts}),
  getDocs:async q=>{
   let docs=[];
@@ -23,7 +24,7 @@ async function harness(){
  },getDoc:async ref=>{calls.push({kind:'document',path:ref.path});const e=dataset.find(e=>ref.path==='events/'+e.id);return e?row(e.id,e):{exists:()=>false,data:()=>undefined};}});
  await vm.runInContext('(async()=>{'+source.replace(/^import.*\n/gm,'')+`\nuser={uid:'member'};groups=[{id:'g',name:'Grupo'},{id:'b',name:'Otro'}];view='all';agendaLayout='list';participant=()=>true;agendaAccess=()=>true;canManageEvent=()=>false;canManageGroups=()=>false;window.api={loadEvents,moreAgenda,selectView,setAgendaLayout,setAgendaListMonth,shiftAgendaMonth,openLinkedEvent,clearAgenda,state:()=>({ids:events.map(e=>e.id),more:agendaHasMore(),mine:[...myEventIds]}),filter:id=>{$('filter').value=id;render();},month:value=>{agendaMonth=value;},account:uid=>{user={uid};generation++;}};})()`,c);
  dom.window.HTMLElement.prototype.scrollIntoView=()=>{};
- return {dom,c,calls,owns,api:dom.window.api,setData:data=>{dataset=data;},blockNext:promise=>{gate=promise;}};
+ return {dom,c,calls,owns,observers,api:dom.window.api,setData:data=>{dataset=data;},blockNext:promise=>{gate=promise;}};
 }
 const future=(id,group='g',start='2027-12-01T10:00:00Z')=>({id,group,title:id,start,createdBy:'other'});
 (async()=>{
@@ -51,8 +52,16 @@ const future=(id,group='g',start='2027-12-01T10:00:00Z')=>({id,group,title:id,st
  // Month navigation has its own date query and cursor, reused when returning to the month.
  h.setData([...Array.from({length:25},(_,i)=>future('d'+String(i).padStart(2,'0'))),future('jan','g','2028-01-04T10:00:00Z')]);await api.loadEvents();api.month('2027-12');await api.setAgendaLayout('month');await api.moreAgenda();await api.moreAgenda();assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,25);
  await api.shiftAgendaMonth(1);assert(dom.window.document.querySelector('[data-event-id="jan"]'));const beforeReturn=calls.length;await api.shiftAgendaMonth(-1);assert.equal(calls.length,beforeReturn);assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,25);
+ // Switching from the December calendar to List must keep December, not fall back to November.
+ await api.setAgendaLayout('list');assert.equal(dom.window.document.getElementById('agendaMonthFilter').value,'2027-12');assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,10);assert(!dom.window.document.querySelector('[data-event-id="jan"]'));
+ // Scroll loading requests no extra pages before the end is visible, and continues into December.
+ await api.setAgendaListMonth('');h.setData([...Array.from({length:25},(_,i)=>future('nov'+String(i).padStart(2,'0'),'g','2027-11-12T10:00:00Z')),future('december','g','2027-12-12T10:00:00Z')]);await api.loadEvents();dom.window.document.getElementById('events').hidden=false;
+ const beforeScroll=calls.length,firstObserver=h.observers.at(-1);assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,10);assert(!dom.window.document.querySelector('[data-event-id="december"]'));
+ firstObserver.fire();firstObserver.fire();await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));assert.equal(calls.length,beforeScroll+1,'Repeated intersection callbacks share a single request');assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,20);
+ h.observers.at(-1).fire();await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));assert(dom.window.document.querySelector('[data-event-id="december"]'));assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,26);
+ const afterScroll=calls.length;firstObserver.fire();await new Promise(r=>setImmediate(r));assert.equal(calls.length,afterScroll,'Disconnected markers must never trigger old requests');
  // Recent feedback and long ongoing events have separate cursors; both remain in the data set.
- const now=Date.now(),recent=future('recent','g',new Date(now-36*3600000).toISOString()),ongoing={...future('long','g',new Date(now-20*86400000).toISOString()),endAt:now+86400000};h.setData([future('next'),recent,ongoing]);await api.setAgendaLayout('list');await api.loadEvents();assert(api.state().ids.includes('long'));assert(api.state().ids.includes('recent'));
+ const now=Date.now(),recent=future('recent','g',new Date(now-36*3600000).toISOString()),ongoing={...future('long','g',new Date(now-20*86400000).toISOString()),endAt:now+86400000};h.setData([future('next'),recent,ongoing]);await api.setAgendaLayout('list');await api.setAgendaListMonth('');await api.loadEvents();assert(api.state().ids.includes('long'));assert(api.state().ids.includes('recent'));
  // A late response from the previous account cannot repopulate the new account's agenda.
  h.setData([future('old')]);let release;h.blockNext(new Promise(resolve=>release=resolve));const oldLoad=api.loadEvents();api.account('new-member');h.setData([future('new')]);await api.loadEvents();release();await oldLoad;assert.deepEqual(Array.from(api.state().ids),['new']);api.clearAgenda();assert.equal(api.state().ids.length,0);
  console.log('OK: real 10-document queries, stable same-date cursors, no repeated pages, group filters, own signups beyond page one, direct links, month cache, recent/ongoing events and stale-account isolation.');
