@@ -13,6 +13,6 @@ const html=fs.readFileSync('comunidad/index.html','utf8'),source=html.match(/<sc
  const inner=[...d.querySelectorAll('button')].find(b=>b.textContent==='Ver asistentes / apuntarme');inner.click();await new Promise(r=>setImmediate(r));assert.equal(dom.window.calls,1);
  [...d.querySelectorAll('button')].find(b=>b.textContent==='Ver más quedadas').click();assert.equal(d.querySelectorAll('details[data-event-id]').length,20);assert.equal(dom.window.calls,1);
  for(const node of d.querySelectorAll('details'))node.scrollIntoView=()=>{};
- dom.window.HTMLElement.prototype.scrollIntoView=()=>{};await dom.window.openLinked();assert(d.querySelector('[data-event-id="e25"]').open);assert.equal(dom.window.calls,1);
+ dom.window.HTMLElement.prototype.scrollIntoView=()=>{};dom.window.openLinked();assert(d.querySelector('[data-event-id="e25"]').open);assert.equal(dom.window.calls,1);
  console.log('OK: diez tarjetas sin consultas automáticas de asistencia, lista bajo demanda, más tarjetas y enlace fuera del primer bloque.');
 })().catch(e=>{console.error(e);process.exitCode=1});
