@@ -14,7 +14,7 @@ vm.runInContext('const $=id=>document.getElementById(id);\n'+src.slice(src.index
  let summaryReads=0,summaryRelease;Object.assign(c,{collection:(_,name)=>name,query:(...args)=>args,where:()=>{},documentId:()=>{},getDocs:async()=>{summaryReads++;await new Promise(r=>summaryRelease=r);return {docs:[{id:'28',data:()=>({confirmed:11,waiting:0})}]};}});
  vm.runInContext(src.slice(src.indexOf('const cardCountCache='),src.indexOf('async function quickJoin(')),c);
  const one=c.loadCardCounts([{id:'28'}]),two=c.loadCardCounts([{id:'28'}]);assert.equal(summaryReads,1,'Overlapping renders must share the same summary request');summaryRelease();await Promise.all([one,two]);assert.match(c.document.querySelector('span').textContent,/11 apuntados/);await c.loadCardCounts([{id:'28'}]);assert.equal(summaryReads,1);
- assert(src.includes('loadFeedbackAccess(),loadMyAttendance(events.filter('),'Initial agenda waits for personal inscriptions');
+ assert(!src.slice(src.indexOf('async function loadEvents('),src.indexOf('async function loadManagedHistory(')).includes('loadMyAttendance('),'Initial agenda must not query personal inscriptions');
  assert(src.slice(src.indexOf('async function selectView('),src.indexOf('function openEditor(')).includes('stopRosterWatchers();'),'Hidden views must release live roster listeners');
  console.log('OK: existing inscription on first card, negative cache, explicit refresh, concurrent request deduplication, local-write race, offline uncertainty, account isolation and shared summary queries.');
 })().catch(e=>{console.error(e);process.exit(1)});
