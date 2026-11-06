@@ -21,7 +21,7 @@ async function harness(){
   if(gate){const wait=gate;gate=null;await wait;}
   return {docs,size:docs.length};
  },getDoc:async ref=>{calls.push({kind:'document',path:ref.path});const e=dataset.find(e=>ref.path==='events/'+e.id);return e?row(e.id,e):{exists:()=>false,data:()=>undefined};}});
- await vm.runInContext('(async()=>{'+source.replace(/^import.*\n/gm,'')+`\nuser={uid:'member'};groups=[{id:'g',name:'Grupo'},{id:'b',name:'Otro'}];view='all';agendaLayout='list';participant=()=>true;agendaAccess=()=>true;canManageEvent=()=>false;canManageGroups=()=>false;window.api={loadEvents,moreAgenda,selectView,setAgendaLayout,shiftAgendaMonth,openLinkedEvent,clearAgenda,state:()=>({ids:events.map(e=>e.id),more:agendaHasMore(),mine:[...myEventIds]}),filter:id=>{$('filter').value=id;render();},month:value=>{agendaMonth=value;},account:uid=>{user={uid};generation++;}};})()`,c);
+ await vm.runInContext('(async()=>{'+source.replace(/^import.*\n/gm,'')+`\nuser={uid:'member'};groups=[{id:'g',name:'Grupo'},{id:'b',name:'Otro'}];view='all';agendaLayout='list';participant=()=>true;agendaAccess=()=>true;canManageEvent=()=>false;canManageGroups=()=>false;window.api={loadEvents,moreAgenda,selectView,setAgendaLayout,setAgendaListMonth,shiftAgendaMonth,openLinkedEvent,clearAgenda,state:()=>({ids:events.map(e=>e.id),more:agendaHasMore(),mine:[...myEventIds]}),filter:id=>{$('filter').value=id;render();},month:value=>{agendaMonth=value;},account:uid=>{user={uid};generation++;}};})()`,c);
  dom.window.HTMLElement.prototype.scrollIntoView=()=>{};
  return {dom,c,calls,owns,api:dom.window.api,setData:data=>{dataset=data;},blockNext:promise=>{gate=promise;}};
 }
@@ -35,6 +35,14 @@ const future=(id,group='g',start='2027-12-01T10:00:00Z')=>({id,group,title:id,st
  // A filter with matches beyond the first page stays reachable without claiming it is empty.
  await api.loadEvents();api.filter('b');assert.match(dom.window.document.getElementById('events').textContent,/siguiente bloque/);assert(!dom.window.document.getElementById('events').textContent.includes('No hay próximas'));
  await api.moreAgenda();await api.moreAgenda();assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,5);
+ // December must be discoverable and directly queryable even when November fills many pages.
+ h.setData([...Array.from({length:35},(_,i)=>future('nov'+String(i).padStart(2,'0'),'g','2027-11-10T10:00:00Z')),...Array.from({length:12},(_,i)=>future('dec'+String(i).padStart(2,'0'),'g','2027-12-12T14:00:00Z'))]);
+ api.filter('');await api.loadEvents();assert.equal(dom.window.document.querySelectorAll('[data-event-id]').length,10);assert(!dom.window.document.querySelector('[data-event-id^="dec"]'));
+ // The picker offers December of the current year even if no December event has been loaded.
+ assert([...dom.window.document.getElementById('agendaMonthFilter').options].some(o=>o.value===new Date().getUTCFullYear()+'-12'));
+ const beforeDecember=calls.length;await api.setAgendaListMonth('2027-12');assert.equal(calls.length,beforeDecember+1);assert.equal(calls.at(-1).returned,10);assert.equal(dom.window.document.querySelectorAll('[data-event-id^="dec"]').length,10);assert(!dom.window.document.querySelector('[data-event-id^="nov"]'));
+ await api.moreAgenda();assert.equal(dom.window.document.querySelectorAll('[data-event-id^="dec"]').length,12);const cachedDecember=calls.length;await api.setAgendaListMonth('');await api.setAgendaListMonth('2027-12');assert.equal(calls.length,cachedDecember);await api.setAgendaListMonth('');
+ h.setData(Array.from({length:25},(_,i)=>future('e'+String(i).padStart(2,'0'),i>=20?'b':'g')));
  // Own signups are looked up only when explicitly selecting this view, and for new pages.
  await api.loadEvents();h.owns.add('e22');const beforeMine=calls.filter(q=>q.path==='attendees').length;assert.equal(beforeMine,0);
  await api.selectView('mine');assert.equal(calls.filter(q=>q.path==='attendees').length,1);await api.moreAgenda();await api.moreAgenda();assert(api.state().mine.includes('e22'));assert(dom.window.document.querySelector('[data-event-id="e22"]'));
