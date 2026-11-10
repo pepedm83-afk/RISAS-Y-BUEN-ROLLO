@@ -33,5 +33,45 @@ vm.runInContext("const $=id=>document.getElementById(id);\n"+src.match(/function
  let rejectRemoval=true,removals=[];Object.assign(c,{saveAttendanceParty:async(...args)=>{if(rejectRemoval)throw Error('Reserva con pago pendiente de revisión');removals.push(args);},readAttendance:async()=>({used:0,waitingPeople:0}),updateCardFromRoster:()=>{}});
  vm.runInContext(src.slice(src.indexOf('async function quickLeave('),src.indexOf('function updateCardFromRoster(')),c);const toggle=c.document.createElement('button');toggle.textContent='Borrarme';await assert.rejects(()=>c.quickLeave(sample,toggle,{open:false},{}),/pago/);assert(c.myEventIds.has('e'));assert.equal(toggle.textContent,'Borrarme');rejectRemoval=false;await c.quickLeave(sample,toggle,{open:false},{});assert.equal(c.myEventIds.has('e'),false);assert.equal(toggle.textContent,'Reservar');assert.equal(removals[0][3],true);delete sample.meal;c.myEventIds.add('e');await c.quickLeave(sample,toggle,{open:false},{});assert.equal(toggle.textContent,'Me apunto');
  const many=Array.from({length:45},(_,i)=>({...sample,id:'page'+i}));c.visibleEvents=()=>many;c.agendaVisibleLimit=10;c.render();assert.equal(c.document.querySelectorAll('details[data-event-id]').length,10);[...c.document.querySelectorAll('button')].find(b=>b.textContent==='Ver más quedadas').click();assert.equal(c.document.querySelectorAll('details[data-event-id]').length,20);[...c.document.querySelectorAll('button')].find(b=>b.textContent==='Ver más quedadas').click();assert.equal(c.document.querySelectorAll('details[data-event-id]').length,30);[...c.document.querySelectorAll('button')].find(b=>b.textContent==='Ver más quedadas').click();[...c.document.querySelectorAll('button')].find(b=>b.textContent==='Ver más quedadas').click();assert.equal(c.document.querySelectorAll('details[data-event-id]').length,45);assert(![...c.document.querySelectorAll('button')].some(b=>b.textContent==='Ver más quedadas'));
+ // Reproduce an abandoned edit of the Christmas meal and choose Create again.
+ c.events=[{...sample,title:'Comida de Navidad'}];
+ c.participant=()=>true;
+ c.clearDraft=()=>{};
+ c.syncDishEditor=()=>{};
+ c.document.getElementById('editor').scrollIntoView=()=>{};
+ vm.runInContext(src.slice(src.indexOf('function showEditorMode('),src.indexOf('async function touchProfile(')),c);
+ f.elements.id.value='e';
+ f.elements.title.value='Comida de Navidad';
+ f.elements.start.value='2026-12-19T14:00';
+ c.openEditor();
+ assert.match(c.document.getElementById('editingEventNotice').textContent,/Comida de Navidad/);
+ c.confirm=()=>false;
+ c.openNewEvent();
+ assert.equal(f.elements.id.value,'e');
+ c.confirm=()=>true;
+ c.openNewEvent();
+ assert.equal(f.elements.id.value,'');
+ assert.equal(f.elements.title.value,'');
+ assert.equal(f.elements.start.value,'');
+ assert(c.document.getElementById('editingEventNotice').hidden);
+ assert.equal(c.document.getElementById('saveEvent').textContent,'Publicar nueva quedada');
+
+ // Changing a published event with a waiting reservation must ask before writing.
+ const original={...sample,title:'Comida de Navidad',createdBy:'admin'};
+ const changed={...original,title:'Almuerzo de domingo',start:'2026-12-20T10:00:00.000Z'};
+ let edits=0,prompts=0;
+ c.readAttendance=async()=>({event:original,rows:[{uid:'waitlisted'}],used:0,revision:0});
+ c.runTransaction=async(_,fn)=>fn({
+  get:async ref=>({exists:()=>true,data:()=>ref.id==='current'?{revision:0}:original}),
+  set:()=>{edits++;}
+ });
+ c.confirm=text=>{prompts++;assert.match(text,/Comida de Navidad.*Almuerzo de domingo/);return false;};
+ vm.runInContext(src.slice(src.indexOf('function eventIdentityChanges('),src.indexOf('const paymentLabels=')),c);
+ assert.equal(await c.saveEventWithCapacity('e',changed),false);
+ assert.equal(edits,0);
+ assert.equal(prompts,1);
+ c.confirm=()=>{throw Error('No se debe pedir confirmación para la descripción');};
+ assert.equal(await c.saveEventWithCapacity('e',{...original,description:'Detalle actualizado'}),true);
+ assert.equal(edits,1);
  console.log('OK: casillas numeradas 1–12, campos vacíos, duplicados, emojis, quitar y renumerar; plantillas compartidas por grupo, permisos, caché, enlaces y edición sin perder reservas; nueva quedada sin fecha ni id; párrafos conservados.');
 })().catch(e=>{console.error(e);process.exit(1)});
