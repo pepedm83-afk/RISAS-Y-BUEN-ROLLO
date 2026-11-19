@@ -308,12 +308,15 @@ service cloud.firestore {
       function validEvent(isNew) {
         let d = request.resource.data;
         let changed = isNew ? d.keys().toSet() : d.diff(resource.data).affectedKeys();
-        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity','endAt','paymentWindowHours'])
+        return d.keys().hasOnly(['title','category','group','start','location','description','ticket','meal','createdBy','locationURL','mealTime','restaurantURL','activityDeposit','mealDeposit','bizumInstructions','cancelled','mealMenu','mealCloseAt','capacity','mealCapacity','activityLabel','endAt','paymentWindowHours'])
           && d.keys().hasAll(['title','category','group','start','location','description','ticket','meal','createdBy'])
           && (!changed.hasAny(['endAt']) || (d.get('endAt',0) is int && d.get('endAt',0) >= 0 && d.get('endAt',0) <= 4102444800000))
           && (!changed.hasAny(['cancelled']) || d.get('cancelled',false) is bool)
           && (!changed.hasAny(['paymentWindowHours']) || (d.get('paymentWindowHours',0) is int && d.get('paymentWindowHours',0) >= 0 && d.get('paymentWindowHours',0) <= 720))
           && (!changed.hasAny(['capacity']) || (d.get('capacity',0) is int && d.get('capacity',0) >= 0 && d.get('capacity',0) <= 1000))
+          && d.get('activityLabel','') in ['', 'Hotel']
+          && (d.get('mealCapacity',0) is int && d.get('mealCapacity',0) >= 0
+            && d.get('mealCapacity',0) <= 1000 && (d.get('mealCapacity',0) == 0 || d.meal != ''))
           && (!changed.hasAny(['mealMenu']) || validMenu(d.get('mealMenu',[])))
           && (!changed.hasAny(['mealCloseAt']) || (d.get('mealCloseAt',0) is int && d.get('mealCloseAt',0) >= 0 && d.get('mealCloseAt',0) <= 4102444800000))
           && (d.get('mealMenu',[]).size() == 0 || d.meal != '')
@@ -355,7 +358,7 @@ service cloud.firestore {
               && (exists(grantPath) || (review.get('active',false) && review.get('phone','') == profile.phone)))))
           || (noticeSender() && resource.data.createdBy == request.auth.uid);
       }
-      allow update: if verified() && permittedEventEdit() && validEvent(false) && request.resource.data.createdBy == resource.data.createdBy && (request.resource.data.get('capacity',0) == resource.data.get('capacity',0) || capacityMovement());
+      allow update: if verified() && permittedEventEdit() && validEvent(false) && request.resource.data.createdBy == resource.data.createdBy && ((request.resource.data.get('capacity',0) == resource.data.get('capacity',0) && request.resource.data.get('mealCapacity',0) == resource.data.get('mealCapacity',0)) || capacityMovement());
       // The app cancels by setting cancelled=true, preserving registrations and history.
       allow delete: if admin(resource.data.group);
       function latestMovement() {
@@ -409,12 +412,30 @@ service cloud.firestore {
           let before = get(/databases/$(database)/documents/events/$(id)).data;
           let after = getAfter(/databases/$(database)/documents/events/$(id)).data;
           let state = getAfter(/databases/$(database)/documents/events/$(id)/attendanceState/current).data;
-          return d.keys().hasOnly(['seq','actor','uid','kind','people','legacyPeople','limitBefore','limitAfter','createdAt'])
+          return d.keys().hasOnly(['seq','actor','uid','kind','people','legacyPeople','limitBefore','limitAfter','createdAt','activity','meal','capacities','separateSeed'])
             && d.seq is int && d.seq > 0 && state.revision == d.seq && state.lastChange == changeId
             && d.actor == request.auth.uid && (d.uid == request.auth.uid || managedByCurrent(id)) && d.createdAt == request.time
             && d.people is int && d.legacyPeople is int && d.legacyPeople >= 0 && d.legacyPeople <= 11
             && d.limitBefore == before.get('capacity',0) && d.limitAfter == after.get('capacity',0)
-            && (d.kind == 'capacity' ? (managedByCurrent(id) && d.people == 0 && d.legacyPeople == 0 && (d.limitBefore != d.limitAfter || before.get('paymentWindowHours',0) != after.get('paymentWindowHours',0))) : validPartyMovement(d));
+            && (after.get('mealCapacity',0) > 0 ? validSeparateMovement(d,before,after)
+                 : !d.keys().hasAny(['activity','meal','capacities','separateSeed']))
+            && (d.kind == 'capacity' ? (managedByCurrent(id) && d.people == 0 && d.legacyPeople == 0 && (d.limitBefore != d.limitAfter || before.get('mealCapacity',0) != after.get('mealCapacity',0) || before.get('paymentWindowHours',0) != after.get('paymentWindowHours',0))) : validPartyMovement(d));
+        }
+        function validSeparateMovement(d,before,after) {
+          let path = /databases/$(database)/documents/events/$(id)/attendees/$(d.uid);
+          let split = before.get('mealCapacity',0) == 0;
+          let firstJoin = d.seq == 1 && d.kind == 'join';
+          return ((d.kind == 'capacity' || firstJoin)
+              ? (d.capacities == {'activity':after.get('capacity',0),'meal':after.mealCapacity})
+              : !d.keys().hasAny(['capacities']))
+            && ((d.kind == 'capacity' && split) || firstJoin
+              ? (d.separateSeed is list && (firstJoin ? d.separateSeed.size() == 0 : d.separateSeed.size() <= 1000))
+              : !d.keys().hasAny(['separateSeed']))
+            && (d.kind in ['capacity','leave']
+              ? !d.keys().hasAny(['activity','meal'])
+              : (existsAfter(path)
+                && d.activity == getAfter(path).data.get('activityPeople',d.people)
+                && d.meal == getAfter(path).data.mealPeople));
         }
         function validPartyMovement(d) {
           let path = /databases/$(database)/documents/events/$(id)/attendees/$(d.uid);
@@ -440,7 +461,12 @@ service cloud.firestore {
         }
         function unpaid() { return !exists(/databases/$(database)/documents/events/$(id)/payments/$(uid)) || (get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('activity','pending') == 'pending' && get(/databases/$(database)/documents/events/$(id)/payments/$(uid)).data.get('meal','pending') == 'pending'); }
         allow read: if participant() && exists(/databases/$(database)/documents/events/$(id));
-allow create, update: if validAttendanceOrder(uid) && (managedByCurrent(id) || unpaid()) && participant() && (request.auth.uid == uid || (managedByCurrent(id) && (resource != null || registeredParticipant(uid)))) && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople','joinedOrder','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
+allow create, update: if validAttendanceOrder(uid) && (managedByCurrent(id) || unpaid()) && participant() && (request.auth.uid == uid || (managedByCurrent(id) && (resource != null || registeredParticipant(uid)))) && exists(/databases/$(database)/documents/events/$(id)) && request.resource.data.keys().hasOnly(['name','companions','mealPeople','activityPeople','joinedOrder','joinedAt']) && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80 && request.resource.data.companions is int && request.resource.data.companions >= 0 && request.resource.data.companions <= 10 && request.resource.data.get('activityPeople',request.resource.data.companions+1) is int
+        && request.resource.data.get('activityPeople',request.resource.data.companions+1) >= 0
+        && request.resource.data.get('activityPeople',request.resource.data.companions+1) <= request.resource.data.companions+1
+        && request.resource.data.get('activityPeople',request.resource.data.companions+1)+request.resource.data.mealPeople >= request.resource.data.companions+1
+        && (get(/databases/$(database)/documents/events/$(id)).data.meal != '' || request.resource.data.get('activityPeople',request.resource.data.companions+1) == request.resource.data.companions+1)
+        && request.resource.data.mealPeople is int && request.resource.data.mealPeople >= 0 && request.resource.data.mealPeople <= request.resource.data.companions + 1 && (request.resource.data.mealPeople == 0 || get(/databases/$(database)/documents/events/$(id)).data.meal != '');
         allow delete: if participant() && (request.auth.uid == uid || managedByCurrent(id)) && (managedByCurrent(id) || unpaid()) && movementFor(uid,'leave',0);
       }
       // Plate choices are independent of payments; members change only their own reservation.
@@ -486,7 +512,7 @@ allow create, update: if validAttendanceOrder(uid) && (managedByCurrent(id) || u
         function eligible(kind) {
           let e = get(/databases/$(database)/documents/events/$(id)).data;
           let a = get(/databases/$(database)/documents/events/$(id)/attendees/$(uid)).data;
-          return kind == 'activity' ? e.get('activityDeposit',0) > 0 : e.get('mealDeposit',0) > 0 && a.mealPeople > 0;
+          return kind == 'activity' ? e.get('activityDeposit',0) > 0 && a.get('activityPeople',a.companions+1) > 0 : e.get('mealDeposit',0) > 0 && a.mealPeople > 0;
         }
         function userChange(kind) {
           return request.resource.data.get(kind,'pending') == resource.data.get(kind,'pending') ||
